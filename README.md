@@ -1,4 +1,4 @@
-# Porkchop Plotter 🚀
+# Porkchop Plotter 
 
 **Interplanetary launch window calculator using real orbital mechanics.**
 
