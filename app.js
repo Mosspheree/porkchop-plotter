@@ -251,7 +251,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initOrbitArt();
 
   // Set GitHub link
-  document.getElementById('github-link').href = 'https://github.com/yourusername/porkchop-plotter';
+  document.getElementById('github-link').href = 'https://github.com/Mosspheree/porkchop-plotter';
 
   // Auto-compute on load
   compute();
