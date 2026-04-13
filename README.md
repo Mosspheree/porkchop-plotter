@@ -2,7 +2,7 @@
 
 **Interplanetary launch window calculator using real orbital mechanics.**
 
-A mission-grade tool for computing C3 energy landscapes across departure dates and flight times — the same technique used at JPL for every interplanetary mission.
+A mission-grade tool for computing C3 energy landscapes across departure dates and flight times, the same technique used at JPL for every interplanetary mission.
 
 ![Porkchop Plot](https://img.shields.io/badge/orbital-mechanics-E8FF00?style=flat&labelColor=080b10)
 ![Lambert Solver](https://img.shields.io/badge/Lambert-solver-00d4ff?style=flat&labelColor=080b10)
@@ -12,12 +12,12 @@ A mission-grade tool for computing C3 energy landscapes across departure dates a
 
 ## Features
 
-- **Lambert arc solver** — iterative universal variable method (Battin/Lancaster) for accurate delta-v computation
-- **Real Keplerian orbital elements** — J2000.0 mean elements for all planets, accurate to ~2% vs NASA Horizons for 2020–2040
-- **Interactive porkchop plot** — hover any point for departure date, arrival date, TOF, C3, and launch ΔV
-- **Optimal window detection** — automatically finds and marks global minimum C3
-- **Three resolution modes** — Fast (50×38), Standard (80×60), High (120×90)
-- **Zero dependencies** — pure HTML/CSS/JS, no build step required
+- **Lambert arc solver** : iterative universal variable method (Battin/Lancaster) for accurate delta-v computation
+- **Real Keplerian orbital elements** : J2000.0 mean elements for all planets, accurate to ~2% vs NASA Horizons for 2020–2040
+- **Interactive porkchop plot** : hover any point for departure date, arrival date, TOF, C3, and launch ΔV
+- **Optimal window detection** : automatically finds and marks global minimum C3
+- **Three resolution modes** : Fast (50×38), Standard (80×60), High (120×90)
+- **Zero dependencies** : pure HTML/CSS/JS, no build step required
 
 ---
 
