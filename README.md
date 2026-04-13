@@ -38,7 +38,7 @@ The "pork chop" shape of the low-energy contours gives the plot its name. Missio
 ```bash
 git clone https://github.com/yourusername/porkchop-plotter.git
 cd porkchop-plotter
-# Open in browser — no build step needed
+# Open in browser. No build step needed
 open index.html
 ```
 
