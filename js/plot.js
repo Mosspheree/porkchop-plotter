@@ -1,5 +1,5 @@
 /**
- * plot.js — Professional Multi-Layer Porkchop Renderer (10/10 FINAL)
+ * plot.js — Professional Multi-Layer Porkchop Renderer
  * Features: C3 Heatmap, V-inf Contours, DLA Masking, Solar Conjunction Overlay, 
  * and 180-degree Ridge Gap Handling.
  */
@@ -46,14 +46,12 @@ const PorkchopPlot = (() => {
     const PH = H - PAD.t - PAD.b;
     const cellW = PW / NX;
     const cellH = PH / NY;
-
-    // --- LAYER 1: C3 HEATMAP & 180 RIDGE GAP ---
     const imgData = ctx.createImageData(Math.ceil(PW), Math.ceil(PH));
     for (let i = 0; i < NX; i++) {
       for (let j = 0; j < NY; j++) {
         const theta = thetaGrid[i * NY + j];
         
-        // 180° Ridge handling: Leave a physical gap at the singularity
+  
         if (Math.abs(theta - 180) < 0.5) continue;
 
         const c3 = grid[i * NY + j];
@@ -73,9 +71,8 @@ const PorkchopPlot = (() => {
     }
     ctx.putImageData(imgData, PAD.l, PAD.t);
 
-    // --- LAYER 2: SOLAR CONJUNCTION OVERLAY (BLACKOUTS) ---
-    // If SEP angle < 3 degrees, communication is impossible.
-    ctx.fillStyle = 'rgba(255, 0, 0, 0.2)'; 
+
+    ctx.fillStyle = 'rgba(255, 0, 0, 0.25)'; 
     for (let i = 0; i < NX; i++) {
       for (let j = 0; j < NY; j++) {
         if (sepGrid[i * NY + j] < 3.0) {
@@ -84,8 +81,8 @@ const PorkchopPlot = (() => {
       }
     }
 
-    // --- LAYER 3: DLA MASKING ---
-    ctx.fillStyle = 'rgba(20, 20, 20, 0.4)';
+
+    ctx.fillStyle = 'rgba(20, 20, 20, 0.5)';
     for (let i = 0; i < NX; i++) {
       for (let j = 0; j < NY; j++) {
         if (Math.abs(dlaGrid[i * NY + j]) > 28.5) {
@@ -94,8 +91,8 @@ const PorkchopPlot = (() => {
       }
     }
 
-    // --- LAYER 4: ARRIVAL V-INF CONTOURS ---
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+    // --- LAYER 4: V-INF CONTOURS ---
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
     ctx.lineWidth = 1.0;
     ctx.setLineDash([4, 4]);
     for (let lev = 2; lev <= 12; lev += 1) {
@@ -108,90 +105,9 @@ const PorkchopPlot = (() => {
     const bj = bestIdx % NY;
     const bx = PAD.l + (bi + 0.5) * cellW;
     const by = PAD.t + (NY - 1 - bj + 0.5) * cellH;
-    ctx.beginPath();
-    ctx.arc(bx, by, 8, 0, Math.PI * 2);/**
-      }
-    }
-    ctx.stroke();
-  }
-
-  function renderAxes(ctx, PAD, PW, PH, NX, NY, depDates, tofArr) {
-    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(PAD.l, PAD.t);
-    ctx.lineTo(PAD.l, PAD.t + PH);
-    ctx.lineTo(PAD.l + PW, PAD.t + PH);
-    ctx.stroke();
-
-    ctx.font = '10px Space Mono, monospace';
-    ctx.fillStyle = 'rgba(255,255,255,0.6)';
     
-    // X-Axis (Date)
-    ctx.textAlign = 'left';
-    for (let t = 0; t <= 6; t++) {
-      const frac = t / 6;
-      const px = PAD.l + frac * PW;
-      const jd = depDates[0] + frac * (depDates[NX-1] - depDates[0]);
-      const dateStr = OrbitalMechanics.jdToDate(jd).slice(0, 7);
-      ctx.save();
-      ctx.translate(px, PAD.t + PH + 12);
-      ctx.rotate(Math.PI / 6);
-      ctx.fillText(dateStr, 0, 0);
-      ctx.restore();
-    }
-
-    // Y-Axis (TOF)
-    ctx.textAlign = 'right';
-    for (let t = 0; t <= 5; t++) {
-      const frac = t / 5;
-      const py = PAD.t + PH - frac * PH;
-      const tof = tofArr[0] + frac * (tofArr[NY-1] - tofArr[0]);
-      ctx.fillText(Math.round(tof) + 'd', PAD.l - 8, py + 3);
-    }
-  }
-
-  function handleHover(canvas, e) {
-    const rect = canvas.getBoundingClientRect();
-    const info = PorkchopPlot.getHoverInfo(canvas, e.clientX - rect.left, e.clientY - rect.top);
-    const readout = document.getElementById('readout');
-    if (info && readout) {
-      const dlaWarning = Math.abs(info.dla) > 28.5 ? ' <span style="color:#ff5050">(High DLA)</span>' : '';
-      readout.innerHTML = `
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-          <div><b>Depart:</b> ${info.depDate}</div>
-          <div><b>TOF:</b> ${info.tof} days</div>
-          <div><b>C3:</b> ${info.c3} km²/s²</div>
-          <div><b>V∞ Arr:</b> ${info.vInfArr} km/s</div>
-          <div style="grid-column: span 2;"><b>DLA:</b> ${info.dla}°${dlaWarning}</div>
-        </div>
-      `;
-    }
-  }
-
-  function getHoverInfo(canvas, mouseX, mouseY) {
-    const m = canvas._plotMeta;
-    if (!m) return null;
-    const { PAD, PW, PH, NX, NY, depDates, tofArr, grid, arrVinfGrid, dlaGrid } = m;
-    const fx = (mouseX - PAD.l) / PW;
-    const fy = 1 - (mouseY - PAD.t) / PH;
-    if (fx < 0 || fx > 1 || fy < 0 || fy > 1) return null;
-
-    const i = Math.min(NX - 1, Math.floor(fx * NX));
-    const j = Math.min(NY - 1, Math.floor(fy * NY));
-
-    return {
-      depDate: OrbitalMechanics.jdToDate(depDates[i]),
-      tof: Math.round(tofArr[j]),
-      c3: grid[i * NY + j].toFixed(1),
-      vInfArr: arrVinfGrid[i * NY + j].toFixed(2),
-      dla: dlaGrid[i * NY + j].toFixed(1)
-    };
-  }
-
-  return { draw, getHoverInfo };
-})();
-
+    ctx.beginPath();
+    ctx.arc(bx, by, 7, 0, Math.PI * 2);
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 2;
     ctx.stroke();
@@ -223,24 +139,29 @@ const PorkchopPlot = (() => {
 
   function renderAxes(ctx, PAD, PW, PH, NX, NY, depDates, tofArr) {
     ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+    ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(PAD.l, PAD.t);
     ctx.lineTo(PAD.l, PAD.t + PH);
     ctx.lineTo(PAD.l + PW, PAD.t + PH);
     ctx.stroke();
+
     ctx.font = '10px Space Mono, monospace';
-    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
     ctx.textAlign = 'left';
+
     for (let t = 0; t <= 6; t++) {
       const frac = t / 6;
       const px = PAD.l + frac * PW;
-      const dateStr = OrbitalMechanics.jdToDate(depDates[0] + frac * (depDates[NX-1] - depDates[0])).slice(0, 7);
+      const jd = depDates[0] + frac * (depDates[NX-1] - depDates[0]);
+      const dateStr = OrbitalMechanics.jdToDate(jd).slice(0, 7);
       ctx.save();
       ctx.translate(px, PAD.t + PH + 12);
       ctx.rotate(Math.PI / 6);
       ctx.fillText(dateStr, 0, 0);
       ctx.restore();
     }
+
     ctx.textAlign = 'right';
     for (let t = 0; t <= 5; t++) {
       const frac = t / 5;
@@ -253,18 +174,18 @@ const PorkchopPlot = (() => {
   function handleHover(canvas, e) {
     const rect = canvas.getBoundingClientRect();
     const info = PorkchopPlot.getHoverInfo(canvas, e.clientX - rect.left, e.clientY - rect.top);
-    const readout = document.getElementById('readout');
+    const readout = document.getElementById('hover-info');
     if (info && readout) {
       const dlaWarn = Math.abs(info.dla) > 28.5 ? ' <span style="color:#ff5050">(High DLA)</span>' : '';
       const sepWarn = info.sep < 3.0 ? ' <span style="color:#ff5050">(CONJUNCTION)</span>' : '';
       readout.innerHTML = `
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 8px; font-family: monospace; font-size: 12px;">
-          <div><b>DEPART:</b> ${info.depDate}</div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 8px; font-family: monospace; font-size: 11px;">
+          <div><b>DEP:</b> ${info.depDate}</div>
           <div><b>TOF:</b> ${info.tof}d</div>
-          <div><b>C3:</b> ${info.c3} km²/s²</div>
-          <div><b>V∞ ARR:</b> ${info.vInfArr} km/s</div>
-          <div><b>DLA:</b> ${info.dla}°${dlaWarn}</div>
-          <div><b>SEP:</b> ${info.sep.toFixed(1)}°${sepWarn}</div>
+          <div><b>C3:</b> ${info.c3}</div>
+          <div><b>ARR V∞:</b> ${info.vInfArr}</div>
+          <div style="grid-column: span 2;"><b>DLA:</b> ${info.dla}°${dlaWarn}</div>
+          <div style="grid-column: span 2;"><b>SEP:</b> ${info.sep.toFixed(1)}°${sepWarn}</div>
         </div>
       `;
     }
@@ -289,5 +210,17 @@ const PorkchopPlot = (() => {
     };
   }
 
-  return { draw, getHoverInfo };
+  function drawLegend(canvas, minC3, maxC3) {
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    const grad = ctx.createLinearGradient(0, 0, W, 0);
+    for (let i = 0; i < COLORMAP.length; i++) {
+      const [r, g, b] = COLORMAP[i];
+      grad.addColorStop(i / (COLORMAP.length - 1), `rgb(${r},${g},${b})`);
+    }
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  return { draw, getHoverInfo, drawLegend };
 })();
