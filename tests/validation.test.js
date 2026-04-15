@@ -15,7 +15,7 @@ function runValidation() {
     
     // NASA JPL Horizons C3 for these dates is ~14.57 km²/s²
     const TARGET_C3 = 14.57; 
-    const TOLERANCE = 0.02; // 1% tolerance
+    const TOLERANCE = 0.02; // 2% tolerance
 
     try {
         console.log(`Target Mission: Mars 2020`);
