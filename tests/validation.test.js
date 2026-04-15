@@ -1,41 +1,14 @@
 const path = require('path');
 const fs = require('fs');
 
-// Log the current directory to debug the environment
-console.log("Current Directory:", process.cwd());
-console.log("Directory of this script:", __dirname);
+const orbitalPath = path.resolve(__dirname, '../js/orbital.js');
 
-// Look for orbital.js in common locations
-const potentialPaths = [
-    path.resolve(__dirname, '../js/orbital.js'),
-    path.resolve(__dirname, '../orbital.js'),
-    path.resolve(process.cwd(), 'js/orbital.js'),
-    path.resolve(process.cwd(), 'orbital.js')
-];
-
-let orbitalPath = "";
-for (const p of potentialPaths) {
-    if (fs.existsSync(p)) {
-        orbitalPath = p;
-        break;
-    }
-}
-
-if (!orbitalPath) {
-    console.error("CRITICAL ERROR: orbital.js NOT FOUND in any expected location.");
-    console.log("Files found in root:", fs.readdirSync(process.cwd()));
-    if (fs.existsSync(path.join(process.cwd(), 'js'))) {
-        console.log("Files found in js/:", fs.readdirSync(path.join(process.cwd(), 'js')));
-    }
-    process.exit(1);
-}
-
-const { lambertC3 } = require(orbitalPath);
+// Direct import of the OrbitalMechanics object
+const OrbitalMechanics = require(orbitalPath);
+const { lambertC3 } = OrbitalMechanics;
 
 function runValidation() {
     console.log("Starting Mathematical Validation Suite...");
-    console.log(`Loading engine from: ${orbitalPath}`);
-
     const departureDate = new Date('2020-07-30T11:50:00Z');
     const arrivalDate = new Date('2021-02-18T20:55:00Z');
     const tofDays = (arrivalDate - departureDate) / (1000 * 60 * 60 * 24);
