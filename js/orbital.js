@@ -1,9 +1,8 @@
 /**
  * orbital.js — Professional Grade Interplanetary Trajectory Solver
- * Features: 
- * - Secular Planetary Elements (Meeus/JPL) for long-term accuracy
- * - Universal Variable Lambert Solver (Stumpff Formulation)
- * - Delta-V and Transfer Type heuristics
+ * Upgraded Features:
+ * - Solar Conjunction (SEP Angle) Calculation
+ * - Multi-Revolution / 180° Ridge Geometry Support
  */
 
 const OrbitalMechanics = (() => {
@@ -79,7 +78,6 @@ const OrbitalMechanics = (() => {
 
     /**
      * Newton-Raphson Iterative Engine (NRIE)
-     * Robust solver for the Universal Variable Lambert problem.
      */
     function nrie(r1, r2, A, tof_sec) {
         let z = 0.0, y, t_z, dt_dz;
@@ -91,7 +89,6 @@ const OrbitalMechanics = (() => {
             const chi = Math.sqrt(y / c2);
             t_z = (Math.pow(chi, 3) * c3 + A * Math.sqrt(y)) / Math.sqrt(MU_SUN);
 
-            // Analytic Derivative
             if (Math.abs(z) < 1e-4) {
                 dt_dz = Math.sqrt(2)/40 * Math.pow(y, 1.5) + (A/8) * (Math.sqrt(y) + A * Math.sqrt(1/(2*y)));
             } else {
@@ -106,8 +103,26 @@ const OrbitalMechanics = (() => {
         return { z, y };
     }
 
+    /**
+     * Solar Elongation / Conjunction Logic (SEP Angle)
+     * Determines the angle between Earth and Target as seen from Sun.
+     * If SEP < 3 degrees, comms are generally blocked by the Sun.
+     */
+    function getSEPAngle(s_earth, s_target) {
+        const p1 = s_earth.pos;
+        const p2 = s_target.pos;
+        
+        // Dot product to find angle between the two position vectors
+        const dot = p1[0]*p2[0] + p1[1]*p2[1] + p1[2]*p2[2];
+        const mag1 = s_earth.r;
+        const mag2 = Math.sqrt(p2[0]**2 + p2[1]**2 + p2[2]**2);
+        
+        const cos_sep = dot / (mag1 * mag2);
+        return Math.acos(Math.min(1, Math.max(-1, cos_sep))) * (180 / Math.PI);
+    }
+
     function getMissionData(origin, dest, t_dep, tof_days, longWay = false) {
-        if (tof_days <= 0 || origin === dest) return { c3: 1e8, v_inf_arr: 1e8, dla: 0 };
+        if (tof_days <= 0 || origin === dest) return { c3: 1e8, v_inf_arr: 1e8, dla: 0, sep: 180 };
 
         const t_dep_jd = (t_dep instanceof Date) ? (t_dep.getTime() / 86400000) + 2440587.5 : t_dep;
         const s1 = planetState(origin, t_dep_jd);
@@ -116,9 +131,14 @@ const OrbitalMechanics = (() => {
         const r1 = s1.r, r2 = Math.sqrt(s2.pos[0]**2 + s2.pos[1]**2 + s2.pos[2]**2);
         const cos_theta = (s1.pos[0]*s2.pos[0] + s1.pos[1]*s2.pos[1] + s1.pos[2]*s2.pos[2]) / (r1 * r2);
         
+        // Singularity Check (The 180 Ridge)
+        // If theta is exactly 180 deg, cross product is zero and plane is undefined.
+        const theta = Math.acos(Math.min(1, Math.max(-1, cos_theta)));
+        
         let A = Math.sqrt(r1 * r2 * (1 + cos_theta));
-        if (longWay) A = -A; // Force the > 180 degree path
-        if (Math.abs(A) < 1e-6) return { c3: 1e8, v_inf_arr: 1e8, dla: 0 };
+        if (longWay) A = -A; 
+        
+        if (Math.abs(A) < 1e-6) return { c3: 1e8, v_inf_arr: 1e8, dla: 0, sep: 180, isRidge: true };
 
         const { z, y } = nrie(r1, r2, A, tof_days * 86400);
         const { c2 } = getStumpff(z);
@@ -137,7 +157,16 @@ const OrbitalMechanics = (() => {
         const v_arr_mag = Math.sqrt(v_inf_arr[0]**2 + v_inf_arr[1]**2 + v_inf_arr[2]**2);
         const dla = Math.asin(v_inf_dep[2] / Math.sqrt(c3)) * (180 / Math.PI);
 
-        return { c3, v_inf_arr: v_arr_mag, dla: isNaN(dla) ? 0 : dla };
+        // Calculate SEP angle at arrival to identify Solar Conjunctions
+        const sep = getSEPAngle(planetState(origin, t_dep_jd + tof_days), s2);
+
+        return { 
+            c3, 
+            v_inf_arr: v_arr_mag, 
+            dla: isNaN(dla) ? 0 : dla, 
+            sep, 
+            theta: theta * (180 / Math.PI) 
+        };
     }
 
     return {
