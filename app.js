@@ -6,6 +6,7 @@
  * - UI state & event listeners
  * - Orbit animation on canvas
  * - Hover crosshair
+ * - Intelligent TOF windowing
  */
 
 // ── State ──────────────────────────────────────────────────────────────
@@ -51,9 +52,16 @@ function compute() {
   const p1 = OrbitalMechanics.PLANETS[origin];
   const p2 = OrbitalMechanics.PLANETS[dest];
 
-  const hohmann = Math.PI * Math.sqrt(((p1.a + p2.a) / 2) ** 3) * 365.25 / (2 * Math.PI);
-  const minTOF = Math.max(30, hohmann * 0.38);
-  const maxTOF = Math.min(hohmann * 4.0, 1400);
+  // Calculate Hohmann Transfer Time to center the Y-axis search
+  const a1 = p1.a[0];
+  const a2 = p2.a[0];
+  const a_transfer = (a1 + a2) / 2;
+  const hohmann = Math.PI * Math.sqrt(Math.pow(a_transfer, 3)) * 365.25 / (2 * Math.PI);
+
+  // Intelligent TOF Windowing: Inner vs Outer planets
+  const isOuter = (a2 > 4); 
+  const minTOF = isOuter ? hohmann * 0.5 : Math.max(30, hohmann * 0.38);
+  const maxTOF = isOuter ? hohmann * 1.5 : Math.min(1400, hohmann * 4.0);
 
   const startJD = OrbitalMechanics.dateToJD(startYear, 1, 1);
   const endJD = startJD + windowMonths * 30.44;
@@ -78,7 +86,11 @@ function compute() {
     } 
     else if (e.data.type === 'result') {
       const elapsed = (performance.now() - t0).toFixed(0);
-      const { grid, minC3, maxC3, bestIdx } = e.data;
+      const { grid, minC3, bestIdx } = e.data;
+
+      // Colormap Contrast Fix:
+      // Cap the maxC3 to 60 units above minC3 so the "Blue Pockets" stay high-contrast
+      const maxC3 = minC3 + 60;
 
       // Update Global State
       state = { grid, NX, NY, depDates, tofArr, minC3, maxC3, bestIdx, origin, dest };
@@ -116,6 +128,8 @@ function updateMetrics(result) {
 
   const depDate = OrbitalMechanics.jdToDate(depJD);
   const arrDate = OrbitalMechanics.jdToDate(arrJD);
+  
+  // Use the verified Delta-V calculation from orbital.js
   const dv = OrbitalMechanics.c3ToDeltaV(minC3);
   const ttype = OrbitalMechanics.transferType(state.origin, state.dest, tof);
 
