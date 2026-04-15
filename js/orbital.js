@@ -86,27 +86,20 @@ const OrbitalMechanics = (() => {
         
         const r1 = s1.r;
         const r2 = Math.sqrt(s2.x**2 + s2.y**2 + s2.z**2);
-        
-        // 1. Calculate the Chord and the transfer angle
         const c = Math.sqrt((s2.x - s1.x)**2 + (s2.y - s1.y)**2 + (s2.z - s1.z)**2);
         const s = (r1 + r2 + c) / 2;
         
-        // Use the dot product to find the angle between position vectors
-        const dot_pos = (s1.x * s2.x + s1.y * s2.y + s1.z * s2.z);
-        const cos_theta = dot_pos / (r1 * r2);
-        
-        // 2. Cross product check for prograde motion
+        // Determine if the path is prograde (short way) or retrograde
         const cross_z = s1.x * s2.y - s1.y * s2.x;
         const lambda = (cross_z >= 0 ? 1 : -1) * Math.sqrt(Math.max(0, 1 - c / s));
-        
         const tof_sec = tof_days * 86400;
 
-        // 3. Robust Solver for x
+        // Universal Variable Solver
         let x = 0; 
         for (let i = 0; i < 80; i++) {
             const alpha = 2 * Math.acos(x);
             const beta = 2 * Math.asin(lambda * Math.sqrt(Math.max(0, 1 - x * x)));
-            const t_x = Math.sqrt(s**3 / (8 * MU_SUN)) * (alpha - Math.sin(alpha) - (beta - Math.sin(beta)));
+            const t_x = Math.sqrt(Math.pow(s, 3) / (8 * MU_SUN)) * (alpha - Math.sin(alpha) - (beta - Math.sin(beta)));
             
             const dt = t_x - tof_sec;
             if (Math.abs(dt) / tof_sec < 1e-7) break;
@@ -115,7 +108,7 @@ const OrbitalMechanics = (() => {
             const x2 = x + dx;
             const a2 = 2 * Math.acos(x2);
             const b2 = 2 * Math.asin(lambda * Math.sqrt(Math.max(0, 1 - x2 * x2)));
-            const t_x2 = Math.sqrt(s**3 / (8 * MU_SUN)) * (a2 - Math.sin(a2) - (b2 - Math.sin(b2)));
+            const t_x2 = Math.sqrt(Math.pow(s, 3) / (8 * MU_SUN)) * (a2 - Math.sin(a2) - (b2 - Math.sin(b2)));
             
             x -= dt / ((t_x2 - t_x) / dx);
             x = Math.max(-0.9999, Math.min(0.9999, x));
@@ -125,24 +118,24 @@ const OrbitalMechanics = (() => {
         const d_alp = 2 * Math.acos(x);
         const d_bet = 2 * Math.asin(lambda * Math.sqrt(Math.max(0, 1 - x * x)));
         
-        // 4. Recovery of Velocity Vectors
+        // Lagrange Coefficients for Velocity Recovery
         const f = 1 - (a / r1) * (1 - Math.cos(d_alp - d_bet));
         const g = Math.sqrt(Math.pow(a, 3) / MU_SUN) * ((d_alp - Math.sin(d_alp)) - (d_bet - Math.sin(d_bet)));
         
-        // V1_transfer = (r2 - f*r1) / g
+        // 1. Transfer Velocity Vector (Departure)
         const v1t = [
             (s2.x - f * s1.x) / g,
             (s2.y - f * s1.y) / g,
             (s2.z - f * s1.z) / g
         ];
 
-        // 5. Final C3 Calculation: Squared Magnitude of V_infinity
-        // V_inf = V_transfer - V_planet
-        const vx_inf = v1t[0] - s1.vx;
-        const vy_inf = v1t[1] - s1.vy;
-        const vz_inf = v1t[2] - s1.vz;
+        // 2. C3 = Magnitude squared of V_infinity vector
+        // V_inf = V_transfer - V_earth
+        const v_inf_x = v1t[0] - s1.vx;
+        const v_inf_y = v1t[1] - s1.vy;
+        const v_inf_z = v1t[2] - s1.vz;
 
-        const C3 = (vx_inf * vx_inf) + (vy_inf * vy_inf) + (vz_inf * vz_inf);
+        const C3 = (v_inf_x * v_inf_x) + (v_inf_y * v_inf_y) + (v_inf_z * v_inf_z);
 
         return isNaN(C3) ? 1e8 : C3;
     }
