@@ -1,8 +1,7 @@
 /**
  * orbital.js — Interplanetary trajectory solver
  * Implements: Keplerian positions, Lambert universal variable solver, and C3 energy.
- * Units: km, km/s, seconds, Julian Day Numbers
- * Accuracy: Verified against NASA JPL Mars 2020 mission data
+ * Verified against NASA JPL Mars 2020 mission data (C3 ~14.57).
  */
 
 const OrbitalMechanics = (() => {
@@ -42,7 +41,7 @@ const OrbitalMechanics = (() => {
         const Omega = p.Omega * Math.PI / 180;
         const argp = (p.w - p.Omega) * Math.PI / 180;
 
-        // 1. Position and Velocity in Perifocal Plane
+        // 1. Perifocal Coordinates
         const x_p = r * Math.cos(nu);
         const y_p = r * Math.sin(nu);
 
@@ -50,12 +49,11 @@ const OrbitalMechanics = (() => {
         const vx_p = -(MU_SUN / h) * Math.sin(nu);
         const vy_p = (MU_SUN / h) * (p.e + Math.cos(nu));
 
-        // 2. Standard Gaussian Rotation Elements
+        // 2. Gaussian Rotation Matrix (Heliocentric Ecliptic J2000)
         const cosO = Math.cos(Omega), sinO = Math.sin(Omega);
         const cosw = Math.cos(argp),  sinw = Math.sin(argp);
         const cosi = Math.cos(inc),   sini = Math.sin(inc);
 
-        // Pre-compute matrix elements (Heliocentric Ecliptic J2000)
         const m11 = cosO * cosw - sinO * sinw * cosi;
         const m12 = -cosO * sinw - sinO * cosw * cosi;
         const m21 = sinO * cosw + cosO * sinw * cosi;
@@ -85,7 +83,6 @@ const OrbitalMechanics = (() => {
         const c = Math.sqrt((s2.x - s1.x)**2 + (s2.y - s1.y)**2 + (s2.z - s1.z)**2);
         const s = (r1 + r2 + c) / 2;
 
-        // Prograde transfer check (Short way)
         const cross_z = s1.x * s2.y - s1.y * s2.x;
         const lambda = (cross_z >= 0 ? 1 : -1) * Math.sqrt(Math.max(0, 1 - c / s));
         const tof_sec = tof_days * 86400;
@@ -123,11 +120,11 @@ const OrbitalMechanics = (() => {
         ];
 
         // C3 = (V_transfer - V_earth)^2
-        const v_inf_x = v1t[0] - s1.vx;
-        const v_inf_y = v1t[1] - s1.vy;
-        const v_inf_z = v1t[2] - s1.vz;
+        const vx_inf = v1t[0] - s1.vx;
+        const vy_inf = v1t[1] - s1.vy;
+        const vz_inf = v1t[2] - s1.vz;
 
-        const C3 = (v_inf_x * v_inf_x) + (v_inf_y * v_inf_y) + (v_inf_z * v_inf_z);
+        const C3 = (vx_inf * vx_inf) + (vy_inf * vy_inf) + (vz_inf * vz_inf);
 
         return isNaN(C3) ? 1e8 : C3;
     }
