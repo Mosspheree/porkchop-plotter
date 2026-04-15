@@ -69,5 +69,12 @@ function runValidation() {
         process.exit(1);
     }
 }
-
+/** * Bridge for Node.js Testing 
+ * Points explicitly to the function inside the OrbitalMechanics scope.
+ */
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { 
+        lambertC3: OrbitalMechanics.lambertC3 
+    };
+}
 runValidation();
