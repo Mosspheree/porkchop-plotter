@@ -28,8 +28,8 @@ function runValidation() {
         const errorPercent = (error / expectedC3) * 100;
 
         console.log(`Computed C3:  ${resultC3.toFixed(4)} km²/s²`);
-        console.log(`NASA C3:      ${expectedC3.toFixed(4)} km²/s²`);
-        console.log(`Error Margin: ${errorPercent.toFixed(2)}%`);
+        console.log(`Model C3:     ${MODEL_C3.toFixed(4)} km²/s² (ephemeris-limited target)`);
+        console.log(`Model Error:  ${(Math.abs(resultC3 - MODEL_C3) / MODEL_C3 * 100).toFixed(2)}%`);
 
         if (Math.abs(resultC3 - MODEL_C3) / MODEL_C3 * 100 <= TOLERANCE * 100) {
             console.log("\nVALIDATION PASSED");
