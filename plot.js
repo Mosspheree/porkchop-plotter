@@ -51,6 +51,20 @@ const PorkchopPlot = (() => {
       Math.round(c0[2] + f * (c1[2] - c0[2])),
     ];
   }
+  canvas.addEventListener('mousemove', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const info = PorkchopPlot.getHoverInfo(canvas, e.clientX - rect.left, e.clientY - rect.top);
+    
+    if (info) {
+        // Update a side panel or tooltip
+        document.getElementById('readout').innerHTML = `
+            <b>Departure:</b> ${info.depDate}<br>
+            <b>Arrival:</b> ${info.arrDate}<br>
+            <b>TOF:</b> ${info.tof} days<br>
+            <b>C3 Energy:</b> ${info.c3} km²/s²
+        `;
+    }
+});
 
   /**
    * Draw the full porkchop plot onto a canvas element.
