@@ -129,11 +129,17 @@ const OrbitalMechanics = (() => {
         if (Math.abs(A) < 1e-6) return { c3: 1e8, v_inf_arr: 1e8, dla: 0, sep: 180, isRidge: true };
 
         const { z, y } = nrie(r1, r2, A, tof_days * 86400);
+        if (!isFinite(z) || !isFinite(y) || y <= 0) {
+            return { c3: 1e8, v_inf_arr: 1e8, dla: 0, sep: 180, theta: theta * (180 / Math.PI) };
+        }
         const { c2 } = getStumpff(z);
 
         const f = 1 - y / r1;
         const g = A * Math.sqrt(y / MU_SUN);
         const g_dot = 1 - y / r2;
+        if (Math.abs(g) < 1e-10) {
+            return { c3: 1e8, v_inf_arr: 1e8, dla: 0, sep: 180, theta: theta * (180 / Math.PI) };
+        }
 
         const v1 = s1.pos.map((p1, i) => (s2.pos[i] - f * p1) / g);
         const v2 = s2.pos.map((p2, i) => (g_dot * p2 - s1.pos[i]) / g);
