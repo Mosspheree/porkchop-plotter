@@ -1,5 +1,6 @@
 /**
- * plot.js — Porkchop plot renderer
+ * plot.js — Professional Multi-Layer Porkchop Renderer
+ * Features: C3 Heatmap, Arrival V-inf Contours, DLA Masking, and Interactive Readout.
  */
 
 const PorkchopPlot = (() => {
@@ -25,7 +26,8 @@ const PorkchopPlot = (() => {
     ];
   }
 
-  function draw(canvas, grid, NX, NY, depDates, tofArr, minC3, maxC3, bestIdx) {
+  function draw(canvas, results, NX, NY, depDates, tofArr, minC3, maxC3, bestIdx) {
+    const { grid, arrVinfGrid, dlaGrid } = results; 
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
     const W = rect.width || 700;
@@ -38,26 +40,24 @@ const PorkchopPlot = (() => {
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, W, H);
     ctx.textBaseline = 'middle';
-    ctx.imageSmoothingEnabled = false;
 
     const PAD = { l: 64, r: 24, t: 20, b: 56 };
     const PW = W - PAD.l - PAD.r;
     const PH = H - PAD.t - PAD.b;
-
     const cellW = PW / NX;
     const cellH = PH / NY;
-    const imgData = ctx.createImageData(Math.ceil(PW), Math.ceil(PH));
 
+    // --- LAYER 1: C3 HEATMAP ---
+    const imgData = ctx.createImageData(Math.ceil(PW), Math.ceil(PH));
     for (let i = 0; i < NX; i++) {
       for (let j = 0; j < NY; j++) {
         const c3 = grid[i * NY + j];
         const [r, g, b] = c3ToRGB(c3, minC3, maxC3);
         const px = Math.round(i * cellW);
         const py = Math.round((NY - 1 - j) * cellH);
-        const cw = Math.max(1, Math.round(cellW) + 1);
-        const ch = Math.max(1, Math.round(cellH) + 1);
-        for (let dy = 0; dy < ch; dy++) {
-          for (let dx = 0; dx < cw; dx++) {
+        
+        for (let dy = 0; dy < Math.ceil(cellH); dy++) {
+          for (let dx = 0; dx < Math.ceil(cellW); dx++) {
             const x = Math.min(px + dx, Math.ceil(PW) - 1);
             const y = Math.min(py + dy, Math.ceil(PH) - 1);
             const idx = (y * Math.ceil(PW) + x) * 4;
@@ -70,57 +70,67 @@ const PorkchopPlot = (() => {
       }
     }
     ctx.putImageData(imgData, PAD.l, PAD.t);
-
-    const contourStep = (maxC3 - minC3) < 60 ? 5 : 10;
-    const contourStart = Math.ceil(minC3 / contourStep) * contourStep;
-    ctx.lineWidth = 0.7;
-
-    for (let lev = contourStart; lev < maxC3; lev += contourStep) {
-      ctx.beginPath();
-      ctx.strokeStyle = lev < minC3 + (maxC3 - minC3) * 0.35 ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.35)';
-      let labelPlaced = false;
-      for (let i = 0; i < NX - 1; i++) {
-        for (let j = 0; j < NY - 1; j++) {
-          const v00 = grid[i * NY + j];
-          const v10 = grid[(i+1) * NY + j];
-          const v01 = grid[i * NY + (j+1)];
-          const v11 = grid[(i+1) * NY + (j+1)];
-          const above = [v00 > lev, v10 > lev, v11 > lev, v01 > lev];
-          const nAbove = above.filter(Boolean).length;
-          if (nAbove === 0 || nAbove === 4) continue;
-          const x0 = PAD.l + i * cellW;
-          const y0 = PAD.t + (NY - 1 - j) * cellH;
-          ctx.moveTo(x0 + cellW * 0.1, y0 + cellH * 0.5);
-          ctx.lineTo(x0 + cellW * 0.9, y0 + cellH * 0.5);
-          if (!labelPlaced && i % 12 === 0 && j % 10 === 0) {
-            const bright = lev < minC3 + (maxC3 - minC3) * 0.35;
-            ctx.save();
-            ctx.font = 'bold 9px Space Mono, monospace';
-            ctx.fillStyle = bright ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.6)';
-            ctx.fillText(lev.toFixed(0), x0 + 2, y0 - 2);
-            ctx.restore();
-            labelPlaced = true;
-          }
+    ctx.fillStyle = 'rgba(20, 20, 20, 0.4)';
+    for (let i = 0; i < NX; i++) {
+      for (let j = 0; j < NY; j++) {
+        if (Math.abs(dlaGrid[i * NY + j]) > 28.5) {
+          ctx.fillRect(PAD.l + i * cellW, PAD.t + (NY - 1 - j) * cellH, cellW + 0.5, cellH + 0.5);
         }
       }
-      ctx.stroke();
     }
+
+    // --- LAYER 3: ARRIVAL V-INF CONTOURS ---
+    ctx.strokeStyle = 'rgba(255, 80, 80, 0.8)'; // Red for arrival "heat"
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash([5, 3]);
+    
+    // Draw V-inf contours at 1km/s intervals
+    for (let lev = 2; lev <= 12; lev += 1) {
+      drawContourLines(ctx, arrVinfGrid, lev, NX, NY, cellW, cellH, PAD);
+    }
+    ctx.setLineDash([]);
+
 
     const bi = Math.floor(bestIdx / NY);
     const bj = bestIdx % NY;
     const bx = PAD.l + (bi + 0.5) * cellW;
     const by = PAD.t + (NY - 1 - bj + 0.5) * cellH;
     ctx.beginPath();
-    ctx.arc(bx, by, 9, 0, Math.PI * 2);
+    ctx.arc(bx, by, 8, 0, Math.PI * 2);
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 2;
     ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(bx, by, 3.5, 0, Math.PI * 2);
-    ctx.fillStyle = '#ffffff';
-    ctx.fill();
 
-    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+
+    renderAxes(ctx, PAD, PW, PH, NX, NY, depDates, tofArr);
+
+    // Store metadata for hover interactions
+    canvas._plotMeta = { PAD, PW, PH, NX, NY, depDates, tofArr, grid, arrVinfGrid, dlaGrid, minC3, maxC3, cellW, cellH };
+
+    if (!canvas._hasHover) {
+      canvas.addEventListener('mousemove', (e) => handleHover(canvas, e));
+      canvas._hasHover = true;
+    }
+  }
+
+  function drawContourLines(ctx, data, level, NX, NY, cw, ch, PAD) {
+    ctx.beginPath();
+    for (let i = 0; i < NX - 1; i++) {
+      for (let j = 0; j < NY - 1; j++) {
+        const v = data[i * NY + j];
+        const vr = data[(i+1) * NY + j];
+        const vt = data[i * NY + (j+1)];
+        if ((v < level && vr >= level) || (v >= level && vr < level)) {
+          ctx.moveTo(PAD.l + (i+0.5)*cw, PAD.t + (NY-1-j)*ch);
+          ctx.lineTo(PAD.l + (i+0.5)*cw, PAD.t + (NY-1-j)*ch + ch);
+        }
+      }
+    }
+    ctx.stroke();
+  }
+
+  function renderAxes(ctx, PAD, PW, PH, NX, NY, depDates, tofArr) {
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(PAD.l, PAD.t);
@@ -129,87 +139,69 @@ const PorkchopPlot = (() => {
     ctx.stroke();
 
     ctx.font = '10px Space Mono, monospace';
-    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    
+    // X-Axis (Date)
     ctx.textAlign = 'left';
-    const nXTicks = Math.min(7, NX);
-    for (let t = 0; t <= nXTicks; t++) {
-      const frac = t / nXTicks;
+    for (let t = 0; t <= 6; t++) {
+      const frac = t / 6;
       const px = PAD.l + frac * PW;
       const jd = depDates[0] + frac * (depDates[NX-1] - depDates[0]);
       const dateStr = OrbitalMechanics.jdToDate(jd).slice(0, 7);
       ctx.save();
-      ctx.translate(px, PAD.t + PH + 10);
-      ctx.rotate(Math.PI / 5);
+      ctx.translate(px, PAD.t + PH + 12);
+      ctx.rotate(Math.PI / 6);
       ctx.fillText(dateStr, 0, 0);
       ctx.restore();
-      ctx.beginPath();
-      ctx.moveTo(px, PAD.t + PH);
-      ctx.lineTo(px, PAD.t + PH + 4);
-      ctx.stroke();
     }
 
+    // Y-Axis (TOF)
     ctx.textAlign = 'right';
-    const nYTicks = 6;
-    for (let t = 0; t <= nYTicks; t++) {
-      const frac = t / nYTicks;
+    for (let t = 0; t <= 5; t++) {
+      const frac = t / 5;
       const py = PAD.t + PH - frac * PH;
       const tof = tofArr[0] + frac * (tofArr[NY-1] - tofArr[0]);
-      ctx.fillText(Math.round(tof) + 'd', PAD.l - 6, py + 4);
-      ctx.beginPath();
-      ctx.moveTo(PAD.l - 4, py);
-      ctx.lineTo(PAD.l, py);
-      ctx.stroke();
-    }
-
-    canvas._plotMeta = { PAD, PW, PH, NX, NY, depDates, tofArr, grid, minC3, maxC3, cellW, cellH };
-
-    // Initialize Hover Listener
-    if (!canvas._hasHover) {
-        canvas.addEventListener('mousemove', (e) => {
-            const rect = canvas.getBoundingClientRect();
-            const info = PorkchopPlot.getHoverInfo(canvas, e.clientX - rect.left, e.clientY - rect.top);
-            const readout = document.getElementById('readout');
-            if (info && readout) {
-                readout.innerHTML = `
-                    <b>Departure:</b> ${info.depDate}<br>
-                    <b>Arrival:</b> ${info.arrDate}<br>
-                    <b>TOF:</b> ${info.tof} days<br>
-                    <b>C3 Energy:</b> ${info.c3} km²/s²
-                `;
-            }
-        });
-        canvas._hasHover = true;
+      ctx.fillText(Math.round(tof) + 'd', PAD.l - 8, py + 3);
     }
   }
 
-  function drawLegend(canvas, minC3, maxC3) {
-    const W = canvas.width, H = canvas.height;
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, W, H);
-    for (let x = 0; x < W; x++) {
-      const c3 = minC3 + (x / W) * (maxC3 - minC3);
-      const [r, g, b] = c3ToRGB(c3, minC3, maxC3);
-      ctx.fillStyle = `rgb(${r},${g},${b})`;
-      ctx.fillRect(x, 0, 1, H);
+  function handleHover(canvas, e) {
+    const rect = canvas.getBoundingClientRect();
+    const info = PorkchopPlot.getHoverInfo(canvas, e.clientX - rect.left, e.clientY - rect.top);
+    const readout = document.getElementById('readout');
+    if (info && readout) {
+      const dlaWarning = Math.abs(info.dla) > 28.5 ? ' <span style="color:#ff5050">(High DLA)</span>' : '';
+      readout.innerHTML = `
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div><b>Depart:</b> ${info.depDate}</div>
+          <div><b>TOF:</b> ${info.tof} days</div>
+          <div><b>C3:</b> ${info.c3} km²/s²</div>
+          <div><b>V∞ Arr:</b> ${info.vInfArr} km/s</div>
+          <div style="grid-column: span 2;"><b>DLA:</b> ${info.dla}°${dlaWarning}</div>
+        </div>
+      `;
     }
   }
 
   function getHoverInfo(canvas, mouseX, mouseY) {
     const m = canvas._plotMeta;
     if (!m) return null;
-    const { PAD, PW, PH, NX, NY, depDates, tofArr, grid } = m;
+    const { PAD, PW, PH, NX, NY, depDates, tofArr, grid, arrVinfGrid, dlaGrid } = m;
     const fx = (mouseX - PAD.l) / PW;
     const fy = 1 - (mouseY - PAD.t) / PH;
     if (fx < 0 || fx > 1 || fy < 0 || fy > 1) return null;
+
     const i = Math.min(NX - 1, Math.floor(fx * NX));
     const j = Math.min(NY - 1, Math.floor(fy * NY));
-    const c3 = grid[i * NY + j];
-    const depJD = depDates[i];
-    const tof = tofArr[j];
-    const depDate = OrbitalMechanics.jdToDate(depJD);
-    const arrDate = OrbitalMechanics.jdToDate(depJD + tof);
-    return { depDate, arrDate, tof: Math.round(tof), c3: c3.toFixed(1), i, j };
+
+    return {
+      depDate: OrbitalMechanics.jdToDate(depDates[i]),
+      tof: Math.round(tofArr[j]),
+      c3: grid[i * NY + j].toFixed(1),
+      vInfArr: arrVinfGrid[i * NY + j].toFixed(2),
+      dla: dlaGrid[i * NY + j].toFixed(1)
+    };
   }
 
-  return { draw, drawLegend, getHoverInfo };
+  return { draw, getHoverInfo };
 })();
