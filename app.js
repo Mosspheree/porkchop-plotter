@@ -2,11 +2,11 @@
  * app.js — Application controller
  * * Wires together orbital mechanics, plot renderer, and UI.
  * Handles:
- * - Grid computation (Web Worker interface)
- * - UI state & event listeners
+ * - Grid computation via Web Worker
+ * - Dynamic TOF windowing based on destination
+ * - Mission Presets (Mars 2020, Clipper, etc.)
+ * - Plot interaction (Hover & Selection locking)
  * - Orbit animation on canvas
- * - Hover crosshair
- * - Intelligent TOF windowing
  */
 
 // ── State ──────────────────────────────────────────────────────────────
@@ -30,6 +30,7 @@ const legendCanvas = document.getElementById('legend-bar');
 const hoverInfo = document.getElementById('hover-info');
 const computeBtn = document.querySelector('.compute-btn');
 const plotTitle = document.getElementById('plot-title');
+const presetSelect = document.getElementById('presets');
 
 // ── Compute ────────────────────────────────────────────────────────────
 function compute() {
@@ -41,14 +42,16 @@ function compute() {
 
   if (origin === dest) {
     hoverInfo.textContent = 'Origin and destination cannot be the same.';
+    hoverInfo.style.color = '#ff4d4d';
     return;
   }
+  hoverInfo.style.color = '';
 
   // UI Feedback
   computeBtn.classList.add('loading');
   computeBtn.innerHTML = '<span class="btn-icon">⟳</span> 0%';
 
-  // 1. Prepare Data for Worker (Hohmann Heuristic)
+  // 1. Prepare Data for Worker (Dynamic Heuristic)
   const p1 = OrbitalMechanics.PLANETS[origin];
   const p2 = OrbitalMechanics.PLANETS[dest];
 
@@ -58,7 +61,7 @@ function compute() {
   const a_transfer = (a1 + a2) / 2;
   const hohmann = Math.PI * Math.sqrt(Math.pow(a_transfer, 3)) * 365.25 / (2 * Math.PI);
 
-  // Intelligent TOF Windowing: Inner vs Outer planets
+  // Dynamic TOF Scaling: Inner vs Outer planets
   const isOuter = (a2 > 4); 
   const minTOF = isOuter ? hohmann * 0.5 : Math.max(30, hohmann * 0.38);
   const maxTOF = isOuter ? hohmann * 1.5 : Math.min(1400, hohmann * 4.0);
@@ -88,8 +91,7 @@ function compute() {
       const elapsed = (performance.now() - t0).toFixed(0);
       const { grid, minC3, bestIdx } = e.data;
 
-      // Colormap Contrast Fix:
-      // Cap the maxC3 to 60 units above minC3 so the "Blue Pockets" stay high-contrast
+      // Colormap Contrast Optimization
       const maxC3 = minC3 + 60;
 
       // Update Global State
@@ -100,7 +102,7 @@ function compute() {
       const destName = dest.charAt(0).toUpperCase() + dest.slice(1);
       plotTitle.textContent = `${originName} → ${destName} Porkchop Plot`;
 
-      // Draw Plot and Metrics
+      // Draw Everything
       updateMetrics(state);
       PorkchopPlot.draw(canvas, grid, NX, NY, depDates, tofArr, minC3, maxC3, bestIdx);
       PorkchopPlot.drawLegend(legendCanvas, minC3, maxC3);
@@ -129,19 +131,59 @@ function updateMetrics(result) {
   const depDate = OrbitalMechanics.jdToDate(depJD);
   const arrDate = OrbitalMechanics.jdToDate(arrJD);
   
-  // Use the verified Delta-V calculation from orbital.js
+  // High-precision Delta-V from orbital.js
   const dv = OrbitalMechanics.c3ToDeltaV(minC3);
   const ttype = OrbitalMechanics.transferType(state.origin, state.dest, tof);
 
-  document.getElementById('m-dep').textContent = depDate.slice(0, 7);
-  document.getElementById('m-arr').textContent = arrDate.slice(0, 7);
+  document.getElementById('m-dep').textContent = depDate.slice(0, 10);
+  document.getElementById('m-arr').textContent = arrDate.slice(0, 10);
   document.getElementById('m-tof').textContent = Math.round(tof);
-  document.getElementById('m-c3').textContent = minC3.toFixed(1);
+  document.getElementById('m-c3').textContent = minC3.toFixed(2);
   document.getElementById('m-dv').textContent = dv.toFixed(2);
   document.getElementById('m-type').textContent = ttype;
 }
 
-// ── Hover interaction ──────────────────────────────────────────────────
+/**
+ * Handle Mission Presets
+ */
+function applyPreset() {
+  const val = presetSelect.value;
+  if (val === 'custom') return;
+
+  const presets = {
+    'mars2020': { origin: 'earth', dest: 'mars', year: 2020, months: 12 },
+    'clipper':  { origin: 'earth', dest: 'jupiter', year: 2024, months: 12 },
+    'voyager2': { origin: 'earth', dest: 'jupiter', year: 1977, months: 12 }
+  };
+
+  const p = presets[val];
+  document.getElementById('origin').value = p.origin;
+  document.getElementById('dest').value = p.dest;
+  document.getElementById('startYear').value = p.year;
+  document.getElementById('windowMonths').value = p.months;
+  
+  compute();
+}
+
+// ── Interaction ────────────────────────────────────────────────────────
+
+// Click to "Lock" a specific trajectory into the sidebar
+canvas.addEventListener('click', (e) => {
+  if (!state.grid) return;
+  const rect = canvas.getBoundingClientRect();
+  const info = PorkchopPlot.getHoverInfo(canvas, e.clientX - rect.left, e.clientY - rect.top);
+  
+  if (info) {
+    const clickedIdx = info.i * state.NY + info.j;
+    const c3Value = state.grid[clickedIdx];
+    updateMetrics({ ...state, bestIdx: clickedIdx, minC3: c3Value });
+    
+    // Quick visual flash to confirm selection
+    canvas.style.filter = 'brightness(1.5)';
+    setTimeout(() => canvas.style.filter = '', 100);
+  }
+});
+
 canvas.addEventListener('mousemove', (e) => {
   if (!state.grid) return;
   const rect = canvas.getBoundingClientRect();
@@ -191,8 +233,6 @@ function initOrbitArt() {
   let transferAngle = 0;
   function draw() {
     ctx.clearRect(0, 0, W, H);
-
-    // Sun
     ctx.beginPath();
     ctx.arc(cx, cy, 7, 0, Math.PI * 2);
     ctx.fillStyle = '#E8FF00';
@@ -202,14 +242,11 @@ function initOrbitArt() {
     ctx.fill();
     ctx.shadowBlur = 0;
 
-    // Orbits + planets
     orbits.forEach(o => {
       ctx.beginPath();
       ctx.arc(cx, cy, o.r, 0, Math.PI * 2);
       ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-      ctx.lineWidth = 1;
       ctx.stroke();
-
       const px = cx + o.r * Math.cos(o.angle);
       const py = cy + o.r * Math.sin(o.angle);
       ctx.beginPath();
@@ -218,7 +255,6 @@ function initOrbitArt() {
       ctx.fill();
     });
 
-    // Transfer arc (Earth → Mars)
     const e = orbits[1], m = orbits[2];
     const ex = cx + e.r * Math.cos(e.angle);
     const ey = cy + e.r * Math.sin(e.angle);
@@ -229,12 +265,10 @@ function initOrbitArt() {
     ctx.moveTo(ex, ey);
     ctx.quadraticCurveTo(cx + 20, cy - 30, mx2, my2);
     ctx.strokeStyle = 'rgba(232,255,0,0.35)';
-    ctx.lineWidth = 1.5;
     ctx.setLineDash([4, 4]);
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Spacecraft
     const t = (Math.sin(transferAngle) + 1) / 2;
     const sx = ex + t * t * (mx2 - ex) + 2 * t * (1-t) * (cx + 20 - ex);
     const sy = ey + t * t * (my2 - ey) + 2 * t * (1-t) * (cy - 30 - ey);
@@ -254,5 +288,11 @@ function initOrbitArt() {
 document.addEventListener('DOMContentLoaded', () => {
   initOrbitArt();
   document.getElementById('github-link').href = 'https://github.com/Mosspheree/porkchop-plotter';
+  
+  if (presetSelect) {
+    presetSelect.addEventListener('change', applyPreset);
+  }
+
+  // Initial Auto-Compute
   compute();
 });
