@@ -89,7 +89,6 @@ const OrbitalMechanics = (() => {
         return isNaN(C3) ? 1e8 : C3;
     }
 
-    // Return the object for browser use
     return { lambertC3 };
 })();
 
