@@ -112,7 +112,14 @@ function computeLaunchWindows() {
       const maxC3 = minC3 + 60;
 
       // Update Global State
-      state = { grid, NX, NY, depDates, tofArr, minC3, maxC3, bestIdx, origin, dest };
+      state = {
+        grid: e.data.grid,
+        arrVinfGrid: e.data.arrVinfGrid,
+        dlaGrid: e.data.dlaGrid,
+        sepGrid: e.data.sepGrid,
+        thetaGrid: e.data.thetaGrid,
+        NX, NY, depDates, tofArr, minC3, maxC3, bestIdx, origin, dest
+      };
 
       // Update UI Header
       const originName = origin.charAt(0).toUpperCase() + origin.slice(1);
