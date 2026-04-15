@@ -45,32 +45,38 @@ const OrbitalMechanics = (() => {
         const Omega = p.Omega * Math.PI / 180;
         const argp = (p.w - p.Omega) * Math.PI / 180;
 
-        // 1. Position and Velocity in the Perifocal (Orbital) Plane
+        // 1. Orbital Plane Vectors
         const x_p = r * Math.cos(nu);
         const y_p = r * Math.sin(nu);
 
+        // Velocity in perifocal frame
         const h = Math.sqrt(MU_SUN * p.a * AU * (1 - p.e**2));
         const vx_p = -(MU_SUN / h) * Math.sin(nu);
         const vy_p = (MU_SUN / h) * (p.e + Math.cos(nu));
 
-        // 2. Gaussian Rotation Matrix Elements
+        // 2. Standard Gaussian Rotation Elements
         const cosO = Math.cos(Omega), sinO = Math.sin(Omega);
-        const cosw = Math.cos(argp), sinw = Math.sin(argp);
-        const cosi = Math.cos(inc),  sini = Math.sin(inc);
+        const cosw = Math.cos(argp),  sinw = Math.sin(argp);
+        const cosi = Math.cos(inc),   sini = Math.sin(inc);
 
-        const swci = sinw * cosi;
-        const cwci = cosw * cosi;
+        // Pre-compute matrix elements for J2000 Heliocentric Ecliptic
+        const m11 = cosO * cosw - sinO * sinw * cosi;
+        const m12 = -cosO * sinw - sinO * cosw * cosi;
+        const m21 = sinO * cosw + cosO * sinw * cosi;
+        const m22 = -sinO * sinw + cosO * cosw * cosi;
+        const m31 = sinw * sini;
+        const m32 = cosw * sini;
 
-        // 3. Transform to J2000 Heliocentric Ecliptic Frame
-        const x = x_p * (cosO * cosw - sinO * swci) - y_p * (cosO * sinw + sinO * cwci);
-        const y = x_p * (sinO * cosw + cosO * swci) - y_p * (sinO * sinw - cosO * cwci);
-        const z = x_p * (sinw * sini) + y_p * (cosw * sini);
-
-        const vx = vx_p * (cosO * cosw - sinO * swci) - vy_p * (cosO * sinw + sinO * cwci);
-        const vy = vx_p * (sinO * cosw + cosO * swci) - vy_p * (sinO * sinw - cosO * cwci);
-        const vz = vx_p * (sinw * sini) + vy_p * (cosw * sini);
-
-        return { x, y, z, vx, vy, vz, r };
+        // 3. Transform Position and Velocity
+        return {
+            x: x_p * m11 + y_p * m12,
+            y: x_p * m21 + y_p * m22,
+            z: x_p * m31 + y_p * m32,
+            vx: vx_p * m11 + vy_p * m12,
+            vy: vx_p * m21 + vy_p * m22,
+            vz: vx_p * m31 + vy_p * m32,
+            r: r
+        };
     }
 
     function lambertC3(origin, dest, t_dep, tof_days) {
@@ -78,23 +84,34 @@ const OrbitalMechanics = (() => {
         const s1 = planetState(origin, t_dep_jd);
         const s2 = planetState(dest, t_dep_jd + tof_days);
         
-        const r1 = s1.r, r2 = Math.sqrt(s2.x**2 + s2.y**2 + s2.z**2);
+        const r1 = s1.r;
+        const r2 = Math.sqrt(s2.x**2 + s2.y**2 + s2.z**2);
         const c = Math.sqrt((s2.x-s1.x)**2 + (s2.y-s1.y)**2 + (s2.z-s1.z)**2);
         const s = (r1 + r2 + c) / 2;
-        const lambda = Math.sqrt(Math.max(0, 1 - c / s)) * (s1.x * s2.y - s1.y * s2.x >= 0 ? 1 : -1);
+        
+        // Multi-revolution / Prograde check
+        const prograde = (s1.x * s2.y - s1.y * s2.x) >= 0 ? 1 : -1;
+        const lambda = prograde * Math.sqrt(Math.max(0, 1 - c / s));
         const tof_sec = tof_days * 86400;
 
+        // Universal Variable x = cos(alpha/2)
         let x = 0; 
         for (let i = 0; i < 80; i++) {
             const alpha = 2 * Math.acos(x);
             const beta = 2 * Math.asin(lambda * Math.sqrt(Math.max(0, 1 - x*x)));
             const t_x = Math.sqrt(s**3 / (8*MU_SUN)) * (alpha - Math.sin(alpha) - (beta - Math.sin(beta)));
+            
             const dt = t_x - tof_sec;
             if (Math.abs(dt) / tof_sec < 1e-7) break;
+            
+            // Derivative for Newton-Raphson
             const dx = 1e-5;
-            const xp = x + dx;
-            const t_xp = Math.sqrt(s**3 / (8*MU_SUN)) * (2*Math.acos(xp) - Math.sin(2*Math.acos(xp)) - (2*Math.asin(lambda*Math.sqrt(1-xp*xp)) - Math.sin(2*Math.asin(lambda*Math.sqrt(1-xp*xp)))));
-            x -= dt / ((t_xp - t_x) / dx);
+            const x2 = x + dx;
+            const a2 = 2 * Math.acos(x2);
+            const b2 = 2 * Math.asin(lambda * Math.sqrt(Math.max(0, 1 - x2*x2)));
+            const t_x2 = Math.sqrt(s**3 / (8*MU_SUN)) * (a2 - Math.sin(a2) - (b2 - Math.sin(b2)));
+            
+            x -= dt / ((t_x2 - t_x) / dx);
             x = Math.max(-0.999, Math.min(0.999, x));
         }
 
@@ -102,14 +119,22 @@ const OrbitalMechanics = (() => {
         const d_alp = 2 * Math.acos(x);
         const d_bet = 2 * Math.asin(lambda * Math.sqrt(Math.max(0, 1 - x*x)));
         
+        // Lagrange f and g for velocity recovery
         const f = 1 - (a / r1) * (1 - Math.cos(d_alp - d_bet));
-        const g = Math.sqrt(a**3 / MU_SUN) * ((d_alp - Math.sin(d_alp)) - (d_bet - Math.sin(d_bet)));
+        const g = Math.sqrt(Math.pow(a, 3) / MU_SUN) * ((d_alp - Math.sin(d_alp)) - (d_bet - Math.sin(d_bet)));
         
-        // Recover transfer velocity vector
-        const v1t = [(s2.x - f * s1.x) / g, (s2.y - f * s1.y) / g, (s2.z - f * s1.z) / g];
+        // Final Departure Velocity Vector
+        const v1t = [
+            (s2.x - f * s1.x) / g,
+            (s2.y - f * s1.y) / g,
+            (s2.z - f * s1.z) / g
+        ];
 
-        // C3 = Relative velocity magnitude squared: (V_transfer - V_planet)^2
-        const C3 = (v1t[0] - s1.vx)**2 + (v1t[1] - s1.vy)**2 + (v1t[2] - s1.vz)**2;
+        // C3 = Velocity Excess Squared (v_infinity^2)
+        const C3 = Math.pow(v1t[0] - s1.vx, 2) + 
+                   Math.pow(v1t[1] - s1.vy, 2) + 
+                   Math.pow(v1t[2] - s1.vz, 2);
+
         return isNaN(C3) ? 1e8 : C3;
     }
 
