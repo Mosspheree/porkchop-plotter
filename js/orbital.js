@@ -37,81 +37,79 @@ const OrbitalMechanics = (() => {
         const omega = (p.w) * Math.PI / 180;
         const M = L - omega;
 
-        const E = solveKepler(((M % (2*Math.PI)) + 2*Math.PI) % (2*Math.PI), p.e);
+        const E = solveKepler(((M % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI), p.e);
         const nu = 2 * Math.atan2(Math.sqrt(1 + p.e) * Math.sin(E / 2), Math.sqrt(1 - p.e) * Math.cos(E / 2));
         const r = p.a * (1 - p.e * Math.cos(E)) * AU;
 
         const inc = p.inc * Math.PI / 180;
         const Omega = p.Omega * Math.PI / 180;
         const argp = (p.w - p.Omega) * Math.PI / 180;
-        const theta = argp + nu;
 
-        // Position Vector
-        const x = r * (Math.cos(Omega) * Math.cos(theta) - Math.sin(Omega) * Math.sin(theta) * Math.cos(inc));
-        const y = r * (Math.sin(Omega) * Math.cos(theta) + Math.cos(Omega) * Math.sin(theta) * Math.cos(inc));
-        const z = r * (Math.sin(inc) * Math.sin(theta));
+        // 1. Position and Velocity in the Perifocal (Orbital) Plane
+        const x_p = r * Math.cos(nu);
+        const y_p = r * Math.sin(nu);
 
-        // Velocity Vector (Perifocal)
-        const h_ang = Math.sqrt(MU_SUN * p.a * AU * (1 - p.e**2));
-        const v_p_x = -(MU_SUN / h_ang) * Math.sin(nu);
-        const v_p_y = (MU_SUN / h_ang) * (p.e + Math.cos(nu));
+        const h = Math.sqrt(MU_SUN * p.a * AU * (1 - p.e**2));
+        const vx_p = -(MU_SUN / h) * Math.sin(nu);
+        const vy_p = (MU_SUN / h) * (p.e + Math.cos(nu));
 
-        // Rotate Velocity to Ecliptic J2000
-        const vx = v_p_x * (Math.cos(Omega) * Math.cos(argp) - Math.sin(Omega) * Math.sin(argp) * Math.cos(inc)) - v_p_y * (Math.cos(Omega) * Math.sin(argp) + Math.sin(Omega) * Math.cos(argp) * Math.cos(inc));
-        const vy = v_p_x * (Math.sin(Omega) * Math.cos(argp) + Math.cos(Omega) * Math.sin(argp) * Math.cos(inc)) + v_p_y * (Math.cos(Omega) * Math.cos(argp) * Math.cos(inc) - Math.sin(Omega) * Math.sin(argp));
-        const vz = v_p_x * (Math.sin(argp) * Math.sin(inc)) + v_p_y * (Math.cos(argp) * Math.sin(inc));
+        // 2. Gaussian Rotation Matrix Elements
+        const cosO = Math.cos(Omega), sinO = Math.sin(Omega);
+        const cosw = Math.cos(argp), sinw = Math.sin(argp);
+        const cosi = Math.cos(inc),  sini = Math.sin(inc);
+
+        const swci = sinw * cosi;
+        const cwci = cosw * cosi;
+
+        // 3. Transform to J2000 Heliocentric Ecliptic Frame
+        const x = x_p * (cosO * cosw - sinO * swci) - y_p * (cosO * sinw + sinO * cwci);
+        const y = x_p * (sinO * cosw + cosO * swci) - y_p * (sinO * sinw - cosO * cwci);
+        const z = x_p * (sinw * sini) + y_p * (cosw * sini);
+
+        const vx = vx_p * (cosO * cosw - sinO * swci) - vy_p * (cosO * sinw + sinO * cwci);
+        const vy = vx_p * (sinO * cosw + cosO * swci) - vy_p * (sinO * sinw - cosO * cwci);
+        const vz = vx_p * (sinw * sini) + vy_p * (cosw * sini);
 
         return { x, y, z, vx, vy, vz, r };
     }
 
     function lambertC3(origin, dest, t_dep, tof_days) {
         let t_dep_jd = (t_dep instanceof Date) ? (t_dep.getTime() / 86400000) + 2440587.5 : t_dep;
-        if (tof_days <= 0) return 1e8;
-
         const s1 = planetState(origin, t_dep_jd);
         const s2 = planetState(dest, t_dep_jd + tof_days);
         
         const r1 = s1.r, r2 = Math.sqrt(s2.x**2 + s2.y**2 + s2.z**2);
-        const c_chord = Math.sqrt((s2.x-s1.x)**2 + (s2.y-s1.y)**2 + (s2.z-s1.z)**2);
-        const s_semi = (r1 + r2 + c_chord) / 2;
-        
-        const lambda = Math.sqrt(Math.max(0, 1 - c_chord / s_semi)) * (s1.x * s2.y - s1.y * s2.x >= 0 ? 1 : -1);
+        const c = Math.sqrt((s2.x-s1.x)**2 + (s2.y-s1.y)**2 + (s2.z-s1.z)**2);
+        const s = (r1 + r2 + c) / 2;
+        const lambda = Math.sqrt(Math.max(0, 1 - c / s)) * (s1.x * s2.y - s1.y * s2.x >= 0 ? 1 : -1);
         const tof_sec = tof_days * 86400;
 
-        // Universal Variable Solver
-        let x_var = 0; 
+        let x = 0; 
         for (let i = 0; i < 80; i++) {
-            const alpha = 2 * Math.acos(x_var);
-            const beta = 2 * Math.asin(lambda * Math.sqrt(Math.max(0, 1 - x_var*x_var)));
-            const t_x = Math.sqrt(s_semi**3 / (8*MU_SUN)) * (alpha - Math.sin(alpha) - (beta - Math.sin(beta)));
+            const alpha = 2 * Math.acos(x);
+            const beta = 2 * Math.asin(lambda * Math.sqrt(Math.max(0, 1 - x*x)));
+            const t_x = Math.sqrt(s**3 / (8*MU_SUN)) * (alpha - Math.sin(alpha) - (beta - Math.sin(beta)));
             const dt = t_x - tof_sec;
             if (Math.abs(dt) / tof_sec < 1e-7) break;
-            
             const dx = 1e-5;
-            const x_p = x_var + dx;
-            const a_p = 2 * Math.acos(x_p);
-            const b_p = 2 * Math.asin(lambda * Math.sqrt(Math.max(0, 1 - x_p*x_p)));
-            const t_p = Math.sqrt(s_semi**3 / (8*MU_SUN)) * (a_p - Math.sin(a_p) - (b_p - Math.sin(b_p)));
-            x_var -= dt / ((t_p - t_x) / dx);
-            x_var = Math.max(-0.999, Math.min(0.999, x_var));
+            const xp = x + dx;
+            const t_xp = Math.sqrt(s**3 / (8*MU_SUN)) * (2*Math.acos(xp) - Math.sin(2*Math.acos(xp)) - (2*Math.asin(lambda*Math.sqrt(1-xp*xp)) - Math.sin(2*Math.asin(lambda*Math.sqrt(1-xp*xp)))));
+            x -= dt / ((t_xp - t_x) / dx);
+            x = Math.max(-0.999, Math.min(0.999, x));
         }
 
-        const a_semimajor = s_semi / (2 * (1 - x_var*x_var));
-        const alpha_final = 2 * Math.acos(x_var);
-        const beta_final = 2 * Math.asin(lambda * Math.sqrt(Math.max(0, 1 - x_var*x_var)));
+        const a = s / (2 * (1 - x*x));
+        const d_alp = 2 * Math.acos(x);
+        const d_bet = 2 * Math.asin(lambda * Math.sqrt(Math.max(0, 1 - x*x)));
         
-        // Velocity recovery via Lagrange Coefficients
-        const f_coeff = 1 - (a_semimajor / r1) * (1 - Math.cos(alpha_final - beta_final));
-        const g_coeff = Math.sqrt(a_semimajor**3 / MU_SUN) * ((alpha_final - Math.sin(alpha_final)) - (beta_final - Math.sin(beta_final)));
+        const f = 1 - (a / r1) * (1 - Math.cos(d_alp - d_bet));
+        const g = Math.sqrt(a**3 / MU_SUN) * ((d_alp - Math.sin(d_alp)) - (d_bet - Math.sin(d_bet)));
         
-        const v1_trans = [
-            (s2.x - f_coeff * s1.x) / g_coeff,
-            (s2.y - f_coeff * s1.y) / g_coeff,
-            (s2.z - f_coeff * s1.z) / g_coeff
-        ];
+        // Recover transfer velocity vector
+        const v1t = [(s2.x - f * s1.x) / g, (s2.y - f * s1.y) / g, (s2.z - f * s1.z) / g];
 
-        // C3 = Relative velocity vector magnitude squared
-        const C3 = (v1_trans[0] - s1.vx)**2 + (v1_trans[1] - s1.vy)**2 + (v1_trans[2] - s1.vz)**2;
+        // C3 = Relative velocity magnitude squared: (V_transfer - V_planet)^2
+        const C3 = (v1t[0] - s1.vx)**2 + (v1t[1] - s1.vy)**2 + (v1t[2] - s1.vz)**2;
         return isNaN(C3) ? 1e8 : C3;
     }
 
