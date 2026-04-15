@@ -250,10 +250,11 @@ const OrbitalMechanics = (() => {
 })();
 
 /** * Bridge for Node.js Testing 
- * This allows the test script to see your math without breaking the browser.
+ * This allows the test script to see the functions inside the 
+ * OrbitalMechanics object without breaking the browser.
  */
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = { 
-        lambertC3 
+        lambertC3: OrbitalMechanics.lambertC3 
     };
 }
