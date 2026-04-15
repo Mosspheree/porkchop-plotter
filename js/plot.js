@@ -46,12 +46,10 @@ const PorkchopPlot = (() => {
     const cellW = PW / NX;
     const cellH = PH / NY;
 
-    // --- LAYER 1: C3 HEATMAP ---
     const imgData = ctx.createImageData(Math.ceil(PW), Math.ceil(PH));
     for (let i = 0; i < NX; i++) {
       for (let j = 0; j < NY; j++) {
         const theta = thetaGrid[i * NY + j];
-        if (Math.abs(theta - 180) < 2) continue;
 
         const c3 = grid[i * NY + j];
         const [r, g, b] = c3ToRGB(c3, minC3, maxC3);
