@@ -14,8 +14,8 @@ function runValidation() {
     const tofDays = (arrivalDate - departureDate) / (1000 * 60 * 60 * 24);
     const expectedC3 = 14.57;
     const MODEL_C3  = 18.1;
-    const TARGET_C3 = 14.57;
-    const TOLERANCE = 0.02; 
+    const EXPECTED_C3 = 14.57; 
+    const TOLERANCE = 0.01;
 
     try {
         console.log(`Target Mission: Mars 2020`);
