@@ -1,6 +1,6 @@
 /**
  * app.js — Application controller
- * * Wires together orbital mechanics, plot renderer, and UI.
+ * Wires together orbital mechanics, plot renderer, and UI.
  * Handles:
  * - Grid computation via Web Worker
  * - Dynamic TOF windowing based on destination
@@ -12,16 +12,22 @@
 // ── State ──────────────────────────────────────────────────────────────
 let state = {
   grid: null,
-  NX: 0, NY: 0,
+  NX: 0, 
+  NY: 0,
   depDates: [],
   tofArr: [],
-  minC3: 0, maxC3: 100,
+  minC3: 0, 
+  maxC3: 100,
   bestIdx: 0,
   origin: 'earth',
   dest: 'mars',
 };
 
-// Initialize Web Worker
+/**
+ * INITIALIZE WEB WORKER
+ * Using a relative path for GitHub Pages compatibility. 
+ * Ensure worker.js is located in the /js folder.
+ */
 const worker = new Worker('js/worker.js'); 
 
 // ── DOM refs ───────────────────────────────────────────────────────────
@@ -33,12 +39,19 @@ const plotTitle = document.getElementById('plot-title');
 const presetSelect = document.getElementById('presets');
 
 // ── Compute ────────────────────────────────────────────────────────────
-function compute() {
+/**
+ * Main entry point for calculation. 
+ * Renamed to match the onclick handler in index.html.
+ */
+function computeLaunchWindows() {
   const origin = document.getElementById('origin').value;
   const dest = document.getElementById('dest').value;
   const startYear = parseInt(document.getElementById('startYear').value);
   const windowMonths = parseInt(document.getElementById('windowMonths').value);
-  const res = parseInt(document.querySelector('input[name="res"]:checked').value);
+  
+  // Safe check for radio button resolution selection
+  const resElement = document.querySelector('input[name="res"]:checked');
+  const res = resElement ? parseInt(resElement.value) : 100;
 
   if (origin === dest) {
     hoverInfo.textContent = 'Origin and destination cannot be the same.';
@@ -52,8 +65,14 @@ function compute() {
   computeBtn.innerHTML = '<span class="btn-icon">⟳</span> 0%';
 
   // 1. Prepare Data for Worker (Dynamic Heuristic)
+  // Ensure OrbitalMechanics.PLANETS keys are lowercase to match HTML values
   const p1 = OrbitalMechanics.PLANETS[origin];
   const p2 = OrbitalMechanics.PLANETS[dest];
+
+  if (!p1 || !p2) {
+    console.error("Planet data missing for:", origin, dest);
+    return;
+  }
 
   // Calculate Hohmann Transfer Time to center the Y-axis search
   const a1 = p1.a[0];
@@ -61,7 +80,6 @@ function compute() {
   const a_transfer = (a1 + a2) / 2;
   const hohmann = Math.PI * Math.sqrt(Math.pow(a_transfer, 3)) * 365.25 / (2 * Math.PI);
 
-  // Dynamic TOF Scaling: Inner vs Outer planets
   const isOuter = (a2 > 4); 
   const minTOF = isOuter ? hohmann * 0.5 : Math.max(30, hohmann * 0.38);
   const maxTOF = isOuter ? hohmann * 1.5 : Math.min(1400, hohmann * 4.0);
@@ -78,11 +96,10 @@ function compute() {
   const tofArr = [];
   for (let j = 0; j < NY; j++) tofArr.push(minTOF + (j / (NY - 1)) * (maxTOF - minTOF));
 
-  // 2. Post to Worker
   const t0 = performance.now();
   worker.postMessage({ origin, dest, depDates, tofArr, NX, NY });
 
-  // 3. Handle Worker Response
+
   worker.onmessage = function(e) {
     if (e.data.type === 'progress') {
       computeBtn.innerHTML = `<span class="btn-icon">⟳</span> ${e.data.percent}%`;
@@ -91,7 +108,7 @@ function compute() {
       const elapsed = (performance.now() - t0).toFixed(0);
       const { grid, minC3, bestIdx } = e.data;
 
-      // Colormap Contrast Optimization
+      // Colormap Contrast Optimization: Fixed range above minimum for better visualization
       const maxC3 = minC3 + 60;
 
       // Update Global State
@@ -102,7 +119,6 @@ function compute() {
       const destName = dest.charAt(0).toUpperCase() + dest.slice(1);
       plotTitle.textContent = `${originName} → ${destName} Porkchop Plot`;
 
-      // Draw Everything
       updateMetrics(state);
       PorkchopPlot.draw(canvas, grid, NX, NY, depDates, tofArr, minC3, maxC3, bestIdx);
       PorkchopPlot.drawLegend(legendCanvas, minC3, maxC3);
@@ -131,7 +147,7 @@ function updateMetrics(result) {
   const depDate = OrbitalMechanics.jdToDate(depJD);
   const arrDate = OrbitalMechanics.jdToDate(arrJD);
   
-  // High-precision Delta-V from orbital.js
+  // High-precision Delta-V and Transfer Type logic from orbital.js
   const dv = OrbitalMechanics.c3ToDeltaV(minC3);
   const ttype = OrbitalMechanics.transferType(state.origin, state.dest, tof);
 
@@ -162,7 +178,7 @@ function applyPreset() {
   document.getElementById('startYear').value = p.year;
   document.getElementById('windowMonths').value = p.months;
   
-  compute();
+  computeLaunchWindows();
 }
 
 // ── Interaction ────────────────────────────────────────────────────────
@@ -216,7 +232,7 @@ window.addEventListener('resize', () => {
   }, 150);
 });
 
-// ── Hero orbit animation ───────────────────────────────────────────────
+//Hero orbit animation
 function initOrbitArt() {
   const c = document.getElementById('orbit-art');
   if (!c) return;
@@ -284,15 +300,16 @@ function initOrbitArt() {
   draw();
 }
 
-// ── Init ───────────────────────────────────────────────────────────────
+
 document.addEventListener('DOMContentLoaded', () => {
   initOrbitArt();
-  document.getElementById('github-link').href = 'https://github.com/Mosspheree/porkchop-plotter';
+  const ghLink = document.getElementById('github-link');
+  if (ghLink) ghLink.href = 'https://github.com/Mosspheree/porkchop-plotter';
   
   if (presetSelect) {
     presetSelect.addEventListener('change', applyPreset);
   }
 
   // Initial Auto-Compute
-  compute();
+  computeLaunchWindows();
 });
