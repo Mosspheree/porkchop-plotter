@@ -1,43 +1,16 @@
 /**
  * plot.js — Porkchop plot renderer
- *
- * Handles:
- *   - 2D canvas rendering of C3 energy grid
- *   - Colormap (JPL-style: blue=low to red=high)
- *   - Contour line tracing (marching squares)
- *   - Axis labels, gridlines, annotations
- *   - Interactive crosshair & hover readout
- *   - Legend gradient bar
  */
 
 const PorkchopPlot = (() => {
 
-  // JPL-inspired colormap: deep blue → cyan → green → yellow → orange → red
   const COLORMAP = [
-    [8,  28, 80],
-    [12, 52, 140],
-    [18, 82, 185],
-    [28, 120, 210],
-    [50, 155, 230],
-    [85, 185, 245],
-    [130, 210, 248],
-    [170, 230, 250],
-    [200, 240, 215],
-    [210, 240, 160],
-    [180, 230, 100],
-    [140, 210, 50],
-    [100, 185, 20],
-    [70,  160, 8],
-    [200, 230, 50],
-    [240, 220, 30],
-    [250, 185, 20],
-    [245, 140, 10],
-    [235, 90,  8],
-    [220, 50,  8],
-    [200, 20,  8],
-    [170, 8,   8],
-    [130, 4,   4],
-    [100, 0,   0],
+    [8,  28, 80], [12, 52, 140], [18, 82, 185], [28, 120, 210],
+    [50, 155, 230], [85, 185, 245], [130, 210, 248], [170, 230, 250],
+    [200, 240, 215], [210, 240, 160], [180, 230, 100], [140, 210, 50],
+    [100, 185, 20], [70,  160, 8], [200, 230, 50], [240, 220, 30],
+    [250, 185, 20], [245, 140, 10], [235, 90,  8], [220, 50,  8],
+    [200, 20,  8], [170, 8,   8], [130, 4,   4], [100, 0,   0],
   ];
 
   function c3ToRGB(c3, minC3, maxC3) {
@@ -51,34 +24,7 @@ const PorkchopPlot = (() => {
       Math.round(c0[2] + f * (c1[2] - c0[2])),
     ];
   }
-  canvas.addEventListener('mousemove', (e) => {
-    const rect = canvas.getBoundingClientRect();
-    const info = PorkchopPlot.getHoverInfo(canvas, e.clientX - rect.left, e.clientY - rect.top);
-    
-    if (info) {
-        // Update a side panel or tooltip
-        document.getElementById('readout').innerHTML = `
-            <b>Departure:</b> ${info.depDate}<br>
-            <b>Arrival:</b> ${info.arrDate}<br>
-            <b>TOF:</b> ${info.tof} days<br>
-            <b>C3 Energy:</b> ${info.c3} km²/s²
-        `;
-    }
-});
 
-  /**
-   * Draw the full porkchop plot onto a canvas element.
-   *
-   * @param {HTMLCanvasElement} canvas
-   * @param {Float32Array} grid  - NX * NY values, indexed [i*NY + j]
-   * @param {number} NX          - departure date axis bins
-   * @param {number} NY          - TOF axis bins
-   * @param {number[]} depDates  - JD values for each departure index
-   * @param {number[]} tofArr    - TOF values (days) for each j index
-   * @param {number} minC3
-   * @param {number} maxC3
-   * @param {number} bestIdx     - flat index of minimum C3
-   */
   function draw(canvas, grid, NX, NY, depDates, tofArr, minC3, maxC3, bestIdx) {
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
@@ -92,13 +38,12 @@ const PorkchopPlot = (() => {
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, W, H);
     ctx.textBaseline = 'middle';
-    ctx.imageSmoothingEnabled = false; // Keeps the color cells "crisp"
+    ctx.imageSmoothingEnabled = false;
 
     const PAD = { l: 64, r: 24, t: 20, b: 56 };
     const PW = W - PAD.l - PAD.r;
     const PH = H - PAD.t - PAD.b;
 
-    // ── Render color cells ──
     const cellW = PW / NX;
     const cellH = PH / NY;
     const imgData = ctx.createImageData(Math.ceil(PW), Math.ceil(PH));
@@ -126,17 +71,13 @@ const PorkchopPlot = (() => {
     }
     ctx.putImageData(imgData, PAD.l, PAD.t);
 
-    // ── Contour lines (simplified iso-band tracing) ──
     const contourStep = (maxC3 - minC3) < 60 ? 5 : 10;
     const contourStart = Math.ceil(minC3 / contourStep) * contourStep;
     ctx.lineWidth = 0.7;
 
     for (let lev = contourStart; lev < maxC3; lev += contourStep) {
       ctx.beginPath();
-      ctx.strokeStyle = lev < minC3 + (maxC3 - minC3) * 0.35
-        ? 'rgba(255,255,255,0.5)'
-        : 'rgba(0,0,0,0.35)';
-
+      ctx.strokeStyle = lev < minC3 + (maxC3 - minC3) * 0.35 ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.35)';
       let labelPlaced = false;
       for (let i = 0; i < NX - 1; i++) {
         for (let j = 0; j < NY - 1; j++) {
@@ -144,20 +85,13 @@ const PorkchopPlot = (() => {
           const v10 = grid[(i+1) * NY + j];
           const v01 = grid[i * NY + (j+1)];
           const v11 = grid[(i+1) * NY + (j+1)];
-
-          // Count crossings
           const above = [v00 > lev, v10 > lev, v11 > lev, v01 > lev];
           const nAbove = above.filter(Boolean).length;
           if (nAbove === 0 || nAbove === 4) continue;
-
           const x0 = PAD.l + i * cellW;
           const y0 = PAD.t + (NY - 1 - j) * cellH;
-
-          // Draw crossing mark
           ctx.moveTo(x0 + cellW * 0.1, y0 + cellH * 0.5);
           ctx.lineTo(x0 + cellW * 0.9, y0 + cellH * 0.5);
-
-          // Label placement (sparse)
           if (!labelPlaced && i % 12 === 0 && j % 10 === 0) {
             const bright = lev < minC3 + (maxC3 - minC3) * 0.35;
             ctx.save();
@@ -172,25 +106,20 @@ const PorkchopPlot = (() => {
       ctx.stroke();
     }
 
-    // ── Best-window marker ──
     const bi = Math.floor(bestIdx / NY);
     const bj = bestIdx % NY;
     const bx = PAD.l + (bi + 0.5) * cellW;
     const by = PAD.t + (NY - 1 - bj + 0.5) * cellH;
-
-    // Outer ring
     ctx.beginPath();
     ctx.arc(bx, by, 9, 0, Math.PI * 2);
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 2;
     ctx.stroke();
-    // Inner dot
     ctx.beginPath();
     ctx.arc(bx, by, 3.5, 0, Math.PI * 2);
     ctx.fillStyle = '#ffffff';
     ctx.fill();
 
-    // ── Axes ──
     ctx.strokeStyle = 'rgba(255,255,255,0.15)';
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -199,7 +128,6 @@ const PorkchopPlot = (() => {
     ctx.lineTo(PAD.l + PW, PAD.t + PH);
     ctx.stroke();
 
-    // X-axis ticks & labels (departure dates)
     ctx.font = '10px Space Mono, monospace';
     ctx.fillStyle = 'rgba(255,255,255,0.45)';
     ctx.textAlign = 'left';
@@ -217,35 +145,43 @@ const PorkchopPlot = (() => {
       ctx.beginPath();
       ctx.moveTo(px, PAD.t + PH);
       ctx.lineTo(px, PAD.t + PH + 4);
-      ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-      ctx.lineWidth = 1;
       ctx.stroke();
     }
 
-    // Y-axis ticks & labels (TOF)
     ctx.textAlign = 'right';
     const nYTicks = 6;
     for (let t = 0; t <= nYTicks; t++) {
       const frac = t / nYTicks;
       const py = PAD.t + PH - frac * PH;
       const tof = tofArr[0] + frac * (tofArr[NY-1] - tofArr[0]);
-      ctx.fillStyle = 'rgba(255,255,255,0.45)';
       ctx.fillText(Math.round(tof) + 'd', PAD.l - 6, py + 4);
       ctx.beginPath();
       ctx.moveTo(PAD.l - 4, py);
       ctx.lineTo(PAD.l, py);
-      ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-      ctx.lineWidth = 1;
       ctx.stroke();
     }
 
-    // Store meta for hover
     canvas._plotMeta = { PAD, PW, PH, NX, NY, depDates, tofArr, grid, minC3, maxC3, cellW, cellH };
+
+    // Initialize Hover Listener
+    if (!canvas._hasHover) {
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const info = PorkchopPlot.getHoverInfo(canvas, e.clientX - rect.left, e.clientY - rect.top);
+            const readout = document.getElementById('readout');
+            if (info && readout) {
+                readout.innerHTML = `
+                    <b>Departure:</b> ${info.depDate}<br>
+                    <b>Arrival:</b> ${info.arrDate}<br>
+                    <b>TOF:</b> ${info.tof} days<br>
+                    <b>C3 Energy:</b> ${info.c3} km²/s²
+                `;
+            }
+        });
+        canvas._hasHover = true;
+    }
   }
 
-  /**
-   * Draw legend gradient bar onto a canvas element.
-   */
   function drawLegend(canvas, minC3, maxC3) {
     const W = canvas.width, H = canvas.height;
     const ctx = canvas.getContext('2d');
@@ -258,10 +194,6 @@ const PorkchopPlot = (() => {
     }
   }
 
-  /**
-   * Get trajectory info at a canvas mouse position.
-   * Returns { depJD, tof, c3, depDate, arrDate } or null.
-   */
   function getHoverInfo(canvas, mouseX, mouseY) {
     const m = canvas._plotMeta;
     if (!m) return null;
@@ -275,8 +207,7 @@ const PorkchopPlot = (() => {
     const depJD = depDates[i];
     const tof = tofArr[j];
     const depDate = OrbitalMechanics.jdToDate(depJD);
-    const arrJD = depJD + tof;
-    const arrDate = OrbitalMechanics.jdToDate(arrJD);
+    const arrDate = OrbitalMechanics.jdToDate(depJD + tof);
     return { depDate, arrDate, tof: Math.round(tof), c3: c3.toFixed(1), i, j };
   }
 
