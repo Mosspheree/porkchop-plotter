@@ -77,6 +77,8 @@ const PorkchopPlot = (() => {
     const ctx = canvas.getContext('2d');
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, W, H);
+    ctx.textBaseline = 'middle';
+    ctx.imageSmoothingEnabled = false; // Keeps the color cells "crisp"
 
     const PAD = { l: 64, r: 24, t: 20, b: 56 };
     const PW = W - PAD.l - PAD.r;
