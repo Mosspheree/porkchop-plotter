@@ -1,6 +1,9 @@
 /**
  * orbital.js — Professional Grade Interplanetary Trajectory Solver
- * Overhauled for: Analytic Jacobians, Arrival V-Infinity, and DLA constraints.
+ * Features: 
+ * - Secular Planetary Elements (Meeus/JPL) for long-term accuracy
+ * - Universal Variable Lambert Solver (Stumpff Formulation)
+ * - Delta-V and Transfer Type heuristics
  */
 
 const OrbitalMechanics = (() => {
