@@ -120,7 +120,7 @@ function computeLaunchWindows() {
       plotTitle.textContent = `${originName} → ${destName} Porkchop Plot`;
 
       updateMetrics(state);
-      PorkchopPlot.draw(canvas, grid, NX, NY, depDates, tofArr, minC3, maxC3, bestIdx);
+      PorkchopPlot.draw(canvas, e.data, NX, NY, depDates, tofArr, minC3, maxC3, bestIdx);
       PorkchopPlot.drawLegend(legendCanvas, minC3, maxC3);
 
       document.getElementById('compute-time').textContent = 
