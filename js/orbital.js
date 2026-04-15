@@ -114,16 +114,24 @@ const OrbitalMechanics = (() => {
     }
 
     function lambertC3(origin, dest, t_dep, tof_days) {
-        const s1 = planetState(origin, t_dep);
-        const s2 = planetState(dest, t_dep + tof_days);
+        // 1. Safety check for zero-time or same-planet transfers
+        if (tof_days <= 0 || origin === dest) return 1e8;
 
-        const r1 = s1.r, r2 = Math.sqrt(s2.x**2 + s2.y**2 + s2.z**2);
+        let t_dep_jd = (t_dep instanceof Date) ? (t_dep.getTime() / 86400000) + 2440587.5 : t_dep;
+        const s1 = planetState(origin, t_dep_jd);
+        const s2 = planetState(dest, t_dep_jd + tof_days);
+
+        const r1 = s1.r;
+        const r2 = Math.sqrt(s2.x**2 + s2.y**2 + s2.z**2);
         const c = Math.sqrt((s2.x - s1.x)**2 + (s2.y - s1.y)**2 + (s2.z - s1.z)**2);
         const s = (r1 + r2 + c) / 2;
 
+        // 2. Geometry check
         const cross_z = s1.x * s2.y - s1.y * s2.x;
         const dot12   = s1.x * s2.x + s1.y * s2.y + s1.z * s2.z;
-        const A       = Math.sign(cross_z) * Math.sqrt(r1 * r2 + dot12);
+        const A       = Math.sign(cross_z) * Math.sqrt(Math.max(0, r1 * r2 + dot12));
+        
+        // If A is zero, it's a 180-degree transfer (singularity)
         if (Math.abs(A) < 1e-6) return 1e8;
         
         const tof_sec = tof_days * 86400;
@@ -139,35 +147,61 @@ const OrbitalMechanics = (() => {
             return 1/6;
         }
 
+        // 3. Robust Iterator with "Parabolic Damping"
         let z = 0, y, psi;
         for (let i = 0; i < 100; i++) {
             psi = z;
             const c2p = c2(psi), c3p = c3(psi);
+            
+            // Calculate y, ensuring it never goes below a tiny positive value
             y = r1 + r2 + A * (z * c3p - 1) / Math.sqrt(Math.max(1e-12, c2p));
-            if (A > 0 && y < 0) { z += 0.1; continue; }
+            
+            // If y becomes negative, the orbit is physically impossible for this z
+            if (A > 0 && y < 0) {
+                z += 0.5; // Kick z toward the hyperbolic region
+                continue;
+            }
             
             const chi = Math.sqrt(Math.max(0, y / Math.max(1e-12, c2p)));
             const t_z = (Math.pow(chi, 3) * c3p + A * Math.sqrt(Math.max(0, y))) / Math.sqrt(MU_SUN);
             const dt = t_z - tof_sec;
             
-            if (Math.abs(dt) < 1e-2) break;
+            if (Math.abs(dt) < 1e-3) break;
             
-            // Numerical Jacobian step
-            const dz = 1e-4, psi2 = z + dz;
+            // Numerical Jacobian with safety offset
+            const dz = 1e-4;
+            const psi2 = z + dz;
             const y2 = r1 + r2 + A * (psi2 * c3(psi2) - 1) / Math.sqrt(Math.max(1e-12, c2(psi2)));
             const chi2 = Math.sqrt(Math.max(0, y2 / Math.max(1e-12, c2(psi2))));
             const t_z2 = (Math.pow(chi2, 3) * c3(psi2) + A * Math.sqrt(Math.max(0, y2))) / Math.sqrt(MU_SUN);
-            z -= dt / ((t_z2 - t_z) / dz);
+            
+            const derivative = (t_z2 - t_z) / dz;
+            if (Math.abs(derivative) < 1e-12) break; // Avoid division by zero
+            
+            z -= dt / derivative;
+            z = Math.max(-100, Math.min(100, z)); // Keep z in a sane range
         }
 
-        y = r1 + r2 + A * (z * c3(z) - 1) / Math.sqrt(Math.max(1e-12, c2(z)));
-        const f = 1 - y / r1;
-        const g = A * Math.sqrt(Math.max(0, y) / MU_SUN);
+        // 4. Final Velocity Recovery
+        const final_y = r1 + r2 + A * (z * c3(z) - 1) / Math.sqrt(Math.max(1e-12, c2(z)));
+        const f = 1 - final_y / r1;
+        const g = A * Math.sqrt(Math.max(0, final_y) / MU_SUN);
         
-        const v1t = [(s2.x - f * s1.x) / g, (s2.y - f * s1.y) / g, (s2.z - f * s1.z) / g];
-        const vx_inf = v1t[0] - s1.vx, vy_inf = v1t[1] - s1.vy, vz_inf = v1t[2] - s1.vz;
+        if (Math.abs(g) < 1e-4) return 1e8; // Avoid singularity
+
+        const v1t = [
+            (s2.x - f * s1.x) / g,
+            (s2.y - f * s1.y) / g,
+            (s2.z - f * s1.z) / g
+        ];
+
+        const vx_inf = v1t[0] - s1.vx;
+        const vy_inf = v1t[1] - s1.vy;
+        const vz_inf = v1t[2] - s1.vz;
         
-        return vx_inf**2 + vy_inf**2 + vz_inf**2;
+        const C3 = vx_inf**2 + vy_inf**2 + vz_inf**2;
+        
+        return isFinite(C3) ? C3 : 1e8;
     }
 
     return {
