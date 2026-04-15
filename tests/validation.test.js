@@ -1,11 +1,9 @@
 const path = require('path');
 const fs = require('fs');
 
-const orbitalPath = path.resolve(__dirname, '../js/orbital.js');
 
-// Direct import of the OrbitalMechanics object
+const orbitalPath = path.resolve(__dirname, '../js/orbital.js');
 const OrbitalMechanics = require(orbitalPath);
-const { lambertC3 } = OrbitalMechanics;
 
 function runValidation() {
     console.log("Starting Mathematical Validation Suite...");
@@ -15,13 +13,17 @@ function runValidation() {
     const arrivalDate = new Date('2021-02-18T20:55:00Z');
     const tofDays = (arrivalDate - departureDate) / (1000 * 60 * 60 * 24);
     
-    // The Ground Truth: NASA JPL Horizons C3 for these dates is ~14.57
+    // NASA JPL Horizons C3 for these dates is ~14.57 km²/s²
     const TARGET_C3 = 14.57; 
-    const TOLERANCE = 0.01; // Allow 1% error (Industry standard for Keplerian models)
+    const TOLERANCE = 0.01; // 1% tolerance
 
     try {
         console.log(`Target Mission: Mars 2020`);
-        const resultC3 = lambertC3('earth', 'mars', departureDate, tofDays);
+        
+        // FIX: Use getMissionData instead of lambertC3
+        // We destructure 'c3' from the returned mission object
+        const mission = OrbitalMechanics.getMissionData('earth', 'mars', departureDate, tofDays);
+        const resultC3 = mission.c3;
         
         if (resultC3 === undefined || isNaN(resultC3)) {
             throw new Error("Solver returned NaN or Undefined.");
@@ -33,6 +35,10 @@ function runValidation() {
         console.log(`Computed C3:  ${resultC3.toFixed(4)} km²/s²`);
         console.log(`Target C3:    ${TARGET_C3.toFixed(4)} km²/s² (NASA Ground Truth)`);
         console.log(`Margin:       ${errorPercent.toFixed(4)}%`);
+
+        // Log secondary data for extra verification
+        console.log(`Computed DLA: ${mission.dla.toFixed(2)}°`);
+        console.log(`Arrival V∞:   ${mission.v_inf_arr.toFixed(2)} km/s`);
 
         if (errorPercent <= TOLERANCE * 100) {
             console.log("\nVALIDATION PASSED");
