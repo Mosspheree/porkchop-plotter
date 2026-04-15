@@ -153,7 +153,9 @@ const PorkchopPlot = (() => {
     const i = Math.min(m.NX - 1, Math.floor(fx * m.NX)), j = Math.min(m.NY - 1, Math.floor(fy * m.NY));
     const idx = i * m.NY + j;
     return {
+      i, j,
       depDate: OrbitalMechanics.jdToDate(m.depDates[i]),
+      arrDate: OrbitalMechanics.jdToDate(m.depDates[i] + m.tofArr[j]),
       tof: Math.round(m.tofArr[j]),
       c3: m.grid[idx].toFixed(1),
       vInfArr: m.arrVinfGrid[idx].toFixed(2),
