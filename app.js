@@ -1,13 +1,11 @@
 /**
  * app.js — Application controller
- *
- * Wires together orbital mechanics, plot renderer, and UI.
+ * * Wires together orbital mechanics, plot renderer, and UI.
  * Handles:
- *   - Grid computation (Web Worker via inline blob for performance)
- *   - UI state & event listeners
- *   - Orbit animation on canvas
- *   - Hover crosshair
- *   - GitHub link
+ * - Grid computation (Web Worker interface)
+ * - UI state & event listeners
+ * - Orbit animation on canvas
+ * - Hover crosshair
  */
 
 // ── State ──────────────────────────────────────────────────────────────
@@ -21,6 +19,9 @@ let state = {
   origin: 'earth',
   dest: 'mars',
 };
+
+// Initialize Web Worker
+const worker = new Worker('worker.js');
 
 // ── DOM refs ───────────────────────────────────────────────────────────
 const canvas = document.getElementById('porkchop');
@@ -42,40 +43,14 @@ function compute() {
     return;
   }
 
+  // UI Feedback
   computeBtn.classList.add('loading');
-  computeBtn.innerHTML = '<span class="btn-icon">⟳</span> Computing...';
+  computeBtn.innerHTML = '<span class="btn-icon">⟳</span> 0%';
 
-  // Defer to next tick so UI updates
-  setTimeout(() => {
-    const t0 = performance.now();
-    const result = computeGrid(origin, dest, startYear, windowMonths, res);
-    const elapsed = (performance.now() - t0).toFixed(0);
-
-    state = { ...result, origin, dest };
-
-    const originName = origin.charAt(0).toUpperCase() + origin.slice(1);
-    const destName = dest.charAt(0).toUpperCase() + dest.slice(1);
-    plotTitle.textContent = `${originName} → ${destName} Porkchop Plot`;
-
-    updateMetrics(result);
-    PorkchopPlot.draw(canvas, result.grid, result.NX, result.NY, result.depDates, result.tofArr, result.minC3, result.maxC3, result.bestIdx);
-    PorkchopPlot.drawLegend(legendCanvas, result.minC3, result.maxC3);
-
-    document.getElementById('compute-time').textContent = `Computed in ${elapsed}ms · ${result.NX}×${result.NY} grid`;
-
-    computeBtn.classList.remove('loading');
-    computeBtn.innerHTML = '<span class="btn-icon">&#9654;</span> Compute Launch Windows';
-  }, 10);
-}
-
-/**
- * Compute the full C3 grid for the given parameters.
- */
-function computeGrid(origin, dest, startYear, windowMonths, res) {
+  // 1. Prepare Data for Worker (Hohmann Heuristic)
   const p1 = OrbitalMechanics.PLANETS[origin];
   const p2 = OrbitalMechanics.PLANETS[dest];
 
-  // TOF bounds: 40%–400% of Hohmann transfer time (capped at 1400 days)
   const hohmann = Math.PI * Math.sqrt(((p1.a + p2.a) / 2) ** 3) * 365.25 / (2 * Math.PI);
   const minTOF = Math.max(30, hohmann * 0.38);
   const maxTOF = Math.min(hohmann * 4.0, 1400);
@@ -92,30 +67,46 @@ function computeGrid(origin, dest, startYear, windowMonths, res) {
   const tofArr = [];
   for (let j = 0; j < NY; j++) tofArr.push(minTOF + (j / (NY - 1)) * (maxTOF - minTOF));
 
-  const grid = new Float32Array(NX * NY);
-  let minC3 = 1e9, maxC3 = 0, bestIdx = 0;
+  // 2. Post to Worker
+  const t0 = performance.now();
+  worker.postMessage({ origin, dest, depDates, tofArr, NX, NY });
 
-  for (let i = 0; i < NX; i++) {
-    for (let j = 0; j < NY; j++) {
-      const c3 = OrbitalMechanics.lambertC3(origin, dest, depDates[i], tofArr[j]);
-      const capped = Math.min(c3, 300);
-      grid[i * NY + j] = capped;
-      if (capped < minC3) { minC3 = capped; bestIdx = i * NY + j; }
-      if (capped > maxC3) maxC3 = capped;
+  // 3. Handle Worker Response
+  worker.onmessage = function(e) {
+    if (e.data.type === 'progress') {
+      computeBtn.innerHTML = `<span class="btn-icon">⟳</span> ${e.data.percent}%`;
+    } 
+    else if (e.data.type === 'result') {
+      const elapsed = (performance.now() - t0).toFixed(0);
+      const { grid, minC3, maxC3, bestIdx } = e.data;
+
+      // Update Global State
+      state = { grid, NX, NY, depDates, tofArr, minC3, maxC3, bestIdx, origin, dest };
+
+      // Update UI Header
+      const originName = origin.charAt(0).toUpperCase() + origin.slice(1);
+      const destName = dest.charAt(0).toUpperCase() + dest.slice(1);
+      plotTitle.textContent = `${originName} → ${destName} Porkchop Plot`;
+
+      // Draw Plot and Metrics
+      updateMetrics(state);
+      PorkchopPlot.draw(canvas, grid, NX, NY, depDates, tofArr, minC3, maxC3, bestIdx);
+      PorkchopPlot.drawLegend(legendCanvas, minC3, maxC3);
+
+      document.getElementById('compute-time').textContent = 
+        `Computed in ${elapsed}ms · ${NX}×${NY} grid`;
+
+      computeBtn.classList.remove('loading');
+      computeBtn.innerHTML = '<span class="btn-icon">&#9654;</span> Compute Launch Windows';
     }
-  }
-
-  // Cap colormap max for visual contrast
-  maxC3 = Math.min(maxC3, minC3 + 120);
-
-  return { grid, NX, NY, depDates, tofArr, minC3, maxC3, bestIdx };
+  };
 }
 
 /**
  * Update metric cards from computed result.
  */
 function updateMetrics(result) {
-  const { depDates, tofArr, minC3, bestIdx, NX, NY } = result;
+  const { depDates, tofArr, minC3, bestIdx, NY } = result;
   const bi = Math.floor(bestIdx / NY);
   const bj = bestIdx % NY;
 
@@ -143,12 +134,14 @@ canvas.addEventListener('mousemove', (e) => {
   const mx = e.clientX - rect.left;
   const my = e.clientY - rect.top;
   const info = PorkchopPlot.getHoverInfo(canvas, mx, my);
+  
   if (!info) {
     hoverInfo.textContent = 'Hover over the plot to inspect any trajectory';
     return;
   }
+  
   const dv = OrbitalMechanics.c3ToDeltaV(parseFloat(info.c3));
-  hoverInfo.textContent =
+  hoverInfo.textContent = 
     `Dep: ${info.depDate}  →  Arr: ${info.arrDate}  |  TOF: ${info.tof}d  |  C3: ${info.c3} km²/s²  |  ΔV: ${dv.toFixed(2)} km/s`;
 });
 
@@ -182,8 +175,6 @@ function initOrbitArt() {
   ];
 
   let transferAngle = 0;
-  let frame;
-
   function draw() {
     ctx.clearRect(0, 0, W, H);
 
@@ -229,7 +220,7 @@ function initOrbitArt() {
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Spacecraft dot along the arc
+    // Spacecraft
     const t = (Math.sin(transferAngle) + 1) / 2;
     const sx = ex + t * t * (mx2 - ex) + 2 * t * (1-t) * (cx + 20 - ex);
     const sy = ey + t * t * (my2 - ey) + 2 * t * (1-t) * (cy - 30 - ey);
@@ -240,8 +231,7 @@ function initOrbitArt() {
 
     orbits.forEach(o => o.angle += o.speed);
     transferAngle += 0.012;
-
-    frame = requestAnimationFrame(draw);
+    requestAnimationFrame(draw);
   }
   draw();
 }
@@ -249,10 +239,6 @@ function initOrbitArt() {
 // ── Init ───────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   initOrbitArt();
-
-  // Set GitHub link
   document.getElementById('github-link').href = 'https://github.com/Mosspheree/porkchop-plotter';
-
-  // Auto-compute on load
   compute();
 });
