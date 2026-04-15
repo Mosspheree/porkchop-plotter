@@ -1,51 +1,53 @@
-/**
- * MISSION VALIDATION TEST: Mars 2020 (Perseverance)
- * This script verifies that the Lancaster-Blanchard solver matches 
- * NASA JPL historical mission data within a calculated tolerance.
- */
-
 const path = require('path');
+const fs = require('fs');
 
-// Bulletproof path resolution for GitHub Actions
-const orbitalPath = path.resolve(__dirname, '../js/orbital.js');
+// Log the current directory to debug the environment
+console.log("Current Directory:", process.cwd());
+console.log("Directory of this script:", __dirname);
 
-let lambertC3;
-try {
-    const moduleImport = require(orbitalPath);
-    // Specifically targeting the exported function from the OrbitalMechanics IIFE
-    lambertC3 = moduleImport.lambertC3;
-} catch (e) {
-    console.error(`CRITICAL: Could not load orbital engine at ${orbitalPath}`);
-    console.error("Ensure your folder is named 'js' (lowercase) and contains 'orbital.js'.");
+// Look for orbital.js in common locations
+const potentialPaths = [
+    path.resolve(__dirname, '../js/orbital.js'),
+    path.resolve(__dirname, '../orbital.js'),
+    path.resolve(process.cwd(), 'js/orbital.js'),
+    path.resolve(process.cwd(), 'orbital.js')
+];
+
+let orbitalPath = "";
+for (const p of potentialPaths) {
+    if (fs.existsSync(p)) {
+        orbitalPath = p;
+        break;
+    }
+}
+
+if (!orbitalPath) {
+    console.error("CRITICAL ERROR: orbital.js NOT FOUND in any expected location.");
+    console.log("Files found in root:", fs.readdirSync(process.cwd()));
+    if (fs.existsSync(path.join(process.cwd(), 'js'))) {
+        console.log("Files found in js/:", fs.readdirSync(path.join(process.cwd(), 'js')));
+    }
     process.exit(1);
 }
+
+const { lambertC3 } = require(orbitalPath);
 
 function runValidation() {
     console.log("Starting Mathematical Validation Suite...");
     console.log(`Loading engine from: ${orbitalPath}`);
 
-    // Mission: Mars 2020 Perseverance
     const departureDate = new Date('2020-07-30T11:50:00Z');
     const arrivalDate = new Date('2021-02-18T20:55:00Z');
-    
-    // Total flight time in days for your solver's parameters
     const tofDays = (arrivalDate - departureDate) / (1000 * 60 * 60 * 24);
-    
-    const expectedC3 = 14.57; // km²/s²
+    const expectedC3 = 14.57; 
     const tolerancePercent = 3.0; 
 
     try {
         console.log(`Target Mission: Mars 2020`);
-        console.log(`Departure: ${departureDate.toISOString()}`);
-        console.log(`Arrival:   ${arrivalDate.toISOString()}`);
-        console.log(`TOF:       ${tofDays.toFixed(2)} days`);
-        console.log("-----------------------------------------");
-
-        // Passing 'earth', 'mars', start date, and TOF days to the engine
         const resultC3 = lambertC3('earth', 'mars', departureDate, tofDays);
         
         if (resultC3 === undefined || isNaN(resultC3)) {
-            throw new Error("Solver returned NaN or Undefined. Check your math logic.");
+            throw new Error("Solver returned NaN or Undefined.");
         }
 
         const error = Math.abs(resultC3 - expectedC3);
@@ -60,12 +62,10 @@ function runValidation() {
             process.exit(0);
         } else {
             console.error("\nVALIDATION FAILED");
-            console.error(`Error (${errorPercent.toFixed(2)}%) exceeds tolerance (${tolerancePercent}%).`);
             process.exit(1);
         }
     } catch (e) {
-        console.error("\nENGINE CRITICAL FAILURE:");
-        console.error(e.message);
+        console.error("\nENGINE CRITICAL FAILURE:", e.message);
         process.exit(1);
     }
 }
