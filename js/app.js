@@ -82,7 +82,7 @@ function computeLaunchWindows() {
 
   const isOuter = (a2 > 4); 
   const minTOF = isOuter ? hohmann * 0.5 : Math.max(30, hohmann * 0.38);
-  const maxTOF = isOuter ? hohmann * 1.5 : Math.min(1400, hohmann * 4.0);
+  const maxTOF = isOuter ? hohmann * 1.5 : Math.min(400, hohmann * 2.5);
 
   const startJD = OrbitalMechanics.dateToJD(startYear, 1, 1);
   const endJD = startJD + windowMonths * 30.44;
