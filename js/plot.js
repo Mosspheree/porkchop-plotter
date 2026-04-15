@@ -51,7 +51,7 @@ const PorkchopPlot = (() => {
     for (let i = 0; i < NX; i++) {
       for (let j = 0; j < NY; j++) {
         const theta = thetaGrid[i * NY + j];
-        if (Math.abs(theta - 180) < 0.5) continue; // Ridge handling
+        if (Math.abs(theta - 180) < 2) continue;
 
         const c3 = grid[i * NY + j];
         const [r, g, b] = c3ToRGB(c3, minC3, maxC3);
