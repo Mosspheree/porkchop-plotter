@@ -3,6 +3,7 @@
  * Upgraded Features:
  * - Solar Conjunction (SEP Angle) Calculation
  * - Multi-Revolution / 180° Ridge Geometry Support
+ * - Built-in Delta-V and Transfer Type Heuristics
  */
 
 const OrbitalMechanics = (() => {
@@ -76,9 +77,6 @@ const OrbitalMechanics = (() => {
         };
     }
 
-    /**
-     * Newton-Raphson Iterative Engine (NRIE)
-     */
     function nrie(r1, r2, A, tof_sec) {
         let z = 0.0, y, t_z, dt_dz;
         for (let i = 0; i < 20; i++) {
@@ -103,20 +101,12 @@ const OrbitalMechanics = (() => {
         return { z, y };
     }
 
-    /**
-     * Solar Elongation / Conjunction Logic (SEP Angle)
-     * Determines the angle between Earth and Target as seen from Sun.
-     * If SEP < 3 degrees, comms are generally blocked by the Sun.
-     */
     function getSEPAngle(s_earth, s_target) {
         const p1 = s_earth.pos;
         const p2 = s_target.pos;
-        
-        // Dot product to find angle between the two position vectors
         const dot = p1[0]*p2[0] + p1[1]*p2[1] + p1[2]*p2[2];
         const mag1 = s_earth.r;
         const mag2 = Math.sqrt(p2[0]**2 + p2[1]**2 + p2[2]**2);
-        
         const cos_sep = dot / (mag1 * mag2);
         return Math.acos(Math.min(1, Math.max(-1, cos_sep))) * (180 / Math.PI);
     }
@@ -131,8 +121,6 @@ const OrbitalMechanics = (() => {
         const r1 = s1.r, r2 = Math.sqrt(s2.pos[0]**2 + s2.pos[1]**2 + s2.pos[2]**2);
         const cos_theta = (s1.pos[0]*s2.pos[0] + s1.pos[1]*s2.pos[1] + s1.pos[2]*s2.pos[2]) / (r1 * r2);
         
-        // Singularity Check (The 180 Ridge)
-        // If theta is exactly 180 deg, cross product is zero and plane is undefined.
         const theta = Math.acos(Math.min(1, Math.max(-1, cos_theta)));
         
         let A = Math.sqrt(r1 * r2 * (1 + cos_theta));
@@ -155,9 +143,8 @@ const OrbitalMechanics = (() => {
 
         const c3 = v_inf_dep[0]**2 + v_inf_dep[1]**2 + v_inf_dep[2]**2;
         const v_arr_mag = Math.sqrt(v_inf_arr[0]**2 + v_inf_arr[1]**2 + v_inf_arr[2]**2);
-        const dla = Math.asin(v_inf_dep[2] / Math.sqrt(c3)) * (180 / Math.PI);
+        const dla = Math.asin(Math.min(1, Math.max(-1, v_inf_dep[2] / Math.sqrt(c3)))) * (180 / Math.PI);
 
-        // Calculate SEP angle at arrival to identify Solar Conjunctions
         const sep = getSEPAngle(planetState(origin, t_dep_jd + tof_days), s2);
 
         return { 
@@ -172,6 +159,18 @@ const OrbitalMechanics = (() => {
     return {
         getMissionData,
         PLANETS: ELEMENTS,
+        c3ToDeltaV: (c3) => {
+            const mu_e = 398600.44; 
+            const r_leo = 6378 + 200; // 200km LEO orbit
+            const v_inf = Math.sqrt(Math.max(0, c3));
+            const v_circ = Math.sqrt(mu_e / r_leo);
+            return Math.sqrt(v_circ**2 + v_inf**2) - v_circ;
+        },
+        transferType: (origin, dest, tof) => {
+            // Heuristic for Type I (Short way) vs Type II (Long way)
+            // Typically defined by whether the transfer angle is < or > 180 deg
+            return (tof < 250) ? 'Type I' : 'Type II'; 
+        },
         jdToDate: (jd) => new Date((jd - 2440587.5) * 86400000).toISOString().split('T')[0],
         dateToJD: (y, m, d) => (typeof y === 'string') ? (new Date(y).getTime() / 86400000) + 2440587.5 : (new Date(Date.UTC(y, m - 1, d)).getTime() / 86400000) + 2440587.5
     };
