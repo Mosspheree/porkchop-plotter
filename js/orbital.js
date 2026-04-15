@@ -78,41 +78,55 @@ const OrbitalMechanics = (() => {
         const s1 = planetState(origin, t_dep_jd);
         const s2 = planetState(dest, t_dep_jd + tof_days);
 
-        const r1 = s1.r;
+        const r1 = Math.sqrt(s1.x**2 + s1.y**2 + s1.z**2);
         const r2 = Math.sqrt(s2.x**2 + s2.y**2 + s2.z**2);
         const c = Math.sqrt((s2.x - s1.x)**2 + (s2.y - s1.y)**2 + (s2.z - s1.z)**2);
         const s = (r1 + r2 + c) / 2;
 
         const cross_z = s1.x * s2.y - s1.y * s2.x;
-        const lambda = (cross_z >= 0 ? 1 : -1) * Math.sqrt(Math.max(0, 1 - c / s));
+        const dot12   = s1.x * s2.x + s1.y * s2.y + s1.z * s2.z;
+        const A       = Math.sign(cross_z) * Math.sqrt(r1 * r2 + dot12);
+        if (Math.abs(A) < 1e-6) return 1e8;
         const tof_sec = tof_days * 86400;
 
-        let x = 0; 
-        for (let i = 0; i < 80; i++) {
-            const alpha = 2 * Math.acos(x);
-            const beta = 2 * Math.asin(lambda * Math.sqrt(Math.max(0, 1 - x * x)));
-            const t_x = Math.sqrt(Math.pow(s, 3) / (8 * MU_SUN)) * (alpha - Math.sin(alpha) - (beta - Math.sin(beta)));
-            
-            const dt = t_x - tof_sec;
-            if (Math.abs(dt) / tof_sec < 1e-7) break;
-            
-            const dx = 1e-5;
-            const x2 = x + dx;
-            const a2 = 2 * Math.acos(x2);
-            const b2 = 2 * Math.asin(lambda * Math.sqrt(Math.max(0, 1 - x2 * x2)));
-            const t_x2 = Math.sqrt(Math.pow(s, 3) / (8 * MU_SUN)) * (a2 - Math.sin(a2) - (b2 - Math.sin(b2)));
-            
-            x -= dt / ((t_x2 - t_x) / dx);
-            x = Math.max(-0.9999, Math.min(0.9999, x));
+        // Stumpff functions for universal variable formulation
+        function c2(psi) {
+            if (psi >  1e-6) return (1 - Math.cos(Math.sqrt(psi))) / psi;
+            if (psi < -1e-6) return (Math.cosh(Math.sqrt(-psi)) - 1) / (-psi);
+            return 0.5;
+        }
+        function c3(psi) {
+            if (psi >  1e-6) return (Math.sqrt(psi) - Math.sin(Math.sqrt(psi))) / Math.pow(psi, 1.5);
+            if (psi < -1e-6) return (Math.sinh(Math.sqrt(-psi)) - Math.sqrt(-psi)) / Math.pow(-psi, 1.5);
+            return 1 / 6;
         }
 
-        const a = s / (2 * (1 - x * x));
-        const d_alp = 2 * Math.acos(x);
-        const d_bet = 2 * Math.asin(lambda * Math.sqrt(Math.max(0, 1 - x * x)));
-        
-        const f = 1 - (a / r1) * (1 - Math.cos(d_alp - d_bet));
-        const g = Math.sqrt(Math.pow(a, 3) / MU_SUN) * ((d_alp - Math.sin(d_alp)) - (d_bet - Math.sin(d_bet)));
-        
+        // Iterate on z (= psi = α·χ²) to match TOF — Bate/Mueller/White §5.3
+        let z = 0, y, psi;
+        for (let i = 0; i < 300; i++) {
+            psi = z;
+            const c2p = c2(psi), c3p = c3(psi);
+            y = r1 + r2 + A * (z * c3p - 1) / Math.sqrt(Math.max(1e-12, c2p));
+            if (A > 0 && y < 0) { z += 0.1; continue; }
+            const chi  = Math.sqrt(Math.max(0, y / Math.max(1e-12, c2p)));
+            const t_z  = (Math.pow(chi, 3) * c3p + A * Math.sqrt(Math.max(0, y))) / Math.sqrt(MU_SUN);
+            const dt   = t_z - tof_sec;
+            if (Math.abs(dt) < 1e-2) break;
+            const dz   = 1e-4, psi2 = z + dz;
+            const c2p2 = c2(psi2), c3p2 = c3(psi2);
+            const y2   = r1 + r2 + A * (psi2 * c3p2 - 1) / Math.sqrt(Math.max(1e-12, c2p2));
+            const chi2 = Math.sqrt(Math.max(0, y2 / Math.max(1e-12, c2p2)));
+            const t_z2 = (Math.pow(chi2, 3) * c3p2 + A * Math.sqrt(Math.max(0, y2))) / Math.sqrt(MU_SUN);
+            z -= dt / ((t_z2 - t_z) / dz);
+        }
+        psi = z;
+        y   = r1 + r2 + A * (z * c3(psi) - 1) / Math.sqrt(Math.max(1e-12, c2(psi)));
+
+        // Lagrange f and g — provably correct in universal variable form
+        const f = 1 - y / r1;
+        const g = A * Math.sqrt(Math.max(0, y) / MU_SUN);
+        if (Math.abs(g) < 1e-6) return 1e8;
+
         const v1t = [
             (s2.x - f * s1.x) / g,
             (s2.y - f * s1.y) / g,
