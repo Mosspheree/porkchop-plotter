@@ -227,7 +227,7 @@ window.addEventListener('resize', () => {
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => {
     if (state.grid) {
-      PorkchopPlot.draw(canvas, state.grid, state.NX, state.NY, state.depDates, state.tofArr, state.minC3, state.maxC3, state.bestIdx);
+      PorkchopPlot.draw(canvas, state, state.NX, state.NY, state.depDates, state.tofArr, state.minC3, state.maxC3, state.bestIdx);
     }
   }, 150);
 });
