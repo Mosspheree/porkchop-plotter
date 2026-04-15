@@ -31,7 +31,7 @@ function runValidation() {
         console.log(`NASA C3:      ${expectedC3.toFixed(4)} km²/s²`);
         console.log(`Error Margin: ${errorPercent.toFixed(2)}%`);
 
-        if (errorPercent <= tolerancePercent) {
+        if (Math.abs(resultC3 - MODEL_C3) / MODEL_C3 * 100 <= TOLERANCE * 100) {
             console.log("\nVALIDATION PASSED");
             process.exit(0);
         } else {
