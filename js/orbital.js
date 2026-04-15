@@ -55,16 +55,17 @@ const OrbitalMechanics = (() => {
     }
 
     function lambertC3(origin, dest, t_dep, tof_days) {
-        // Handle Date object vs JD input
         let t_dep_jd = (t_dep instanceof Date) ? (t_dep.getTime() / 86400000) + 2440587.5 : t_dep;
-        
         if (tof_days <= 0) return 1e8;
 
         const s1 = planetState(origin, t_dep_jd);
         const s2 = planetState(dest, t_dep_jd + tof_days);
 
-        const r1 = Math.sqrt(s1.x**2 + s1.y**2 + s1.z**2);
-        const r2 = Math.sqrt(s2.x**2 + s2.y**2 + s2.z**2);
+        const r1_vec = [s1.x, s1.y, s1.z];
+        const r2_vec = [s2.x, s2.y, s2.z];
+        const r1 = Math.sqrt(r1_vec[0]**2 + r1_vec[1]**2 + r1_vec[2]**2);
+        const r2 = Math.sqrt(r2_vec[0]**2 + r2_vec[1]**2 + r2_vec[2]**2);
+        
         const c = Math.sqrt((s2.x-s1.x)**2 + (s2.y-s1.y)**2 + (s2.z-s1.z)**2);
         const s = (r1 + r2 + c) / 2;
         const lambda = Math.sqrt(Math.max(0, 1 - c / s)) * (s1.x * s2.y - s1.y * s2.x >= 0 ? 1 : -1);
@@ -86,15 +87,42 @@ const OrbitalMechanics = (() => {
             x = Math.max(-0.99, Math.min(0.99, x));
         }
 
-        const a_transfer = s / (2 * (1 - x*x));
-        const v1_sq = MU_SUN * (2/r1 - 1/a_transfer);
-        const v_planet1 = Math.sqrt(MU_SUN / r1);
-        const C3 = Math.abs(v1_sq - v_planet1*v_planet1) / 1e6; 
+        const a = s / (2 * (1 - x*x));
+        
+        // 1. Calculate Lagrange Coefficients to get the Velocity Vector
+        const de_alpha = 2 * Math.acos(x);
+        const de_beta = 2 * Math.asin(lambda * Math.sqrt(1 - x*x));
+        const f = 1 - (a / r1) * (1 - Math.cos(de_alpha - de_beta));
+        const g = tof_sec - Math.sqrt(a**3 / MU_SUN) * ((de_alpha - Math.sin(de_alpha)) - (de_beta - Math.sin(de_beta)));
+        const g_dot = 1 - (a / r2) * (1 - Math.cos(de_alpha - de_beta));
+
+        // 2. Velocity vector of the transfer orbit at departure
+        const v1_trans = [
+            (s2.x - f * s1.x) / g,
+            (s2.y - f * s1.y) / g,
+            (s2.z - f * s1.z) / g
+        ];
+
+        // 3. Simple circular velocity vector of Earth (approximate)
+        // For better accuracy, planetState should return velocity, but this is the quick fix:
+        const v_mag_earth = Math.sqrt(MU_SUN / r1);
+        const v1_earth = [
+            -v_mag_earth * (s1.y / r1), 
+             v_mag_earth * (s1.x / r1), 
+             0
+        ];
+
+        // 4. C3 = Magnitude squared of the relative velocity vector
+        const v_rel = [
+            v1_trans[0] - v1_earth[0],
+            v1_trans[1] - v1_earth[1],
+            v1_trans[2] - v1_earth[2]
+        ];
+
+        const C3 = (v_rel[0]**2 + v_rel[1]**2 + v_rel[2]**2); // in km²/s²
 
         return isNaN(C3) ? 1e8 : C3;
     }
-
-    return { lambertC3, PLANETS, J2000 };
 })();
 
 /**
