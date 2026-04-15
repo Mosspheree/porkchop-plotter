@@ -1,4 +1,4 @@
-# Porkchop Plotter 
+# Porkchop Plotter
 
 **Interplanetary launch window calculator using real orbital mechanics.**
 
@@ -12,12 +12,12 @@ A mission-grade tool for computing C3 energy landscapes across departure dates a
 
 ## Features
 
-- **Lambert arc solver** : iterative universal variable method (Battin/Lancaster) for accurate delta-v computation
-- **Real Keplerian orbital elements** : J2000.0 mean elements for all planets, accurate to ~2% vs NASA Horizons for 2020–2040
-- **Interactive porkchop plot** : hover any point for departure date, arrival date, TOF, C3, and launch ΔV
-- **Optimal window detection** : automatically finds and marks global minimum C3
-- **Three resolution modes** : Fast (50×38), Standard (80×60), High (120×90)
-- **Zero dependencies** : pure HTML/CSS/JS, no build step required
+- **Lambert arc solver**: universal variable method (Bate/Mueller/White) with Stumpff c2/c3 functions for accurate delta-v computation
+- **Real Keplerian orbital elements**: J2000.0 mean elements for all planets
+- **Interactive porkchop plot**: hover any point for departure date, arrival date, TOF, C3, and launch ΔV
+- **Optimal window detection**: automatically finds and marks global minimum C3
+- **Three resolution modes**: Fast (50×38), Standard (80×60), High (120×90)
+- **Zero dependencies**: pure HTML/CSS/JS, no build step required
 
 ---
 
@@ -61,10 +61,10 @@ python3 -m http.server 8080
    - 3D heliocentric ecliptic coordinates computed for each planet at each date
 
 2. **Lambert solver** (`js/orbital.js → lambertC3()`)
-   - Implements the universal variable x-method (Lancaster & Blanchard, 1969)
+   - Implements the universal variable z-iteration (Bate, Mueller & White)
+   - Stumpff c2/c3 functions handle elliptic, parabolic, and hyperbolic cases uniformly
    - Handles both prograde and retrograde transfers
-   - Iterates to find the semi-major axis of the transfer ellipse
-   - Computes v_∞² (C3) from vis-viva equation
+   - Computes v_∞² (C3) via Lagrange f/g velocity recovery
 
 3. **Grid computation** (`js/app.js → computeGrid()`)
    - Generates NX × NY grid of (departure date, TOF) pairs
@@ -96,49 +96,42 @@ porkchop-plotter/
 │   └── workflows/
 │       └── validate.yml    # CI/CD: Automated physics verification
 ├── js/
-│   ├── app.js              # UI Controller & logic
-│   ├── orbital.js          # The Physics Engine (Lambert/Kepler/Ephemeris)
-│   ├── plot.js             # Canvas rendering & Contours
+│   ├── app.js              # UI controller & logic
+│   ├── orbital.js          # Physics engine (Lambert/Kepler/ephemeris)
+│   ├── plot.js             # Canvas rendering & contours
 │   └── worker.js           # Background math processor
 ├── tests/
-│   └── validation.test.js  # The 0.08% accuracy test suite
+│   └── validation.test.js  # Physics validation suite
 ├── index.html              # Entry point
 ├── style.css               # Main stylesheet
-├── README.md               # Documentation
-└── simulation-demo.png     # Root-level screenshot
+└── README.md               # Documentation
 ```
 
 ---
 
 ## Verification & Accuracy
 
-Unlike standard web visualizations, this engine is benchmarked against real mission data. The **Lancaster-Blanchard** solver is validated using the Mars 2020 (Perseverance) trajectory.
+The Lambert solver is validated against the Mars 2020 (Perseverance) mission trajectory. The engine uses fixed mean motion Keplerian elements (`n = 360/T`) with no secular correction terms. Over the 20-year span from J2000 to the 2020 launch window this accumulates ~5° of Mars longitude drift, which is the primary source of variance against JPL's DE440 ephemeris.
 
-| Parameter | Project Value | NASA JPL Value | Status |
+| Parameter | This project | NASA JPL | Notes |
 | :--- | :--- | :--- | :--- |
-| **C3 Energy** | 14.5817 km²/s² | 14.57 km²/s² | 🟢 Validated (0.08% Error) |
-| **Ephemeris** | Secular J2000.0 | Horizons DE440 | 🟢 High Precision |
+| C3 energy | 18.31 km²/s² | 14.57 km²/s² | Ephemeris-limited (~25%) |
+| Lambert solver | ~10ms TOF residual | — | Numerically correct |
+| Ephemeris | Fixed mean motion J2000 | Horizons DE440 | ~5° Mars lon drift over 20yr |
+| Ignored perturbations | J2, planetary gravity, solar pressure | — | Heliocentric 2-body only |
+
+The Lambert solver itself is numerically correct — the gap to JPL's value is entirely due to the simplified ephemeris, not the trajectory math. Upgrading to Meeus secular polynomial elements (rates per Julian century instead of fixed period) would close the gap to ~2%.
 
 ### CI/CD Integration
-The mathematical core is automatically verified via GitHub Actions on every commit to prevent regressive errors in the Lambert solver or planetary state vectors.
 
-## Accuracy & Limitations
-
-| Metric | Value |
-|---|---|
-| Ephemeris accuracy | ~2% vs NASA Horizons (2020–2040) |
-| Lambert solver convergence | <1e-7 relative error in TOF |
-| Ignored perturbations | J2, planetary gravity, solar pressure |
-| Transfer geometry | Heliocentric, 3D ecliptic frame |
-
-For mission-critical work, use [NASA Horizons](https://ssd.jpl.nasa.gov/horizons/) for ephemeris and validated GMAT/STK for trajectory optimization.
+The mathematical core is automatically verified via GitHub Actions on every commit. The validation test checks that the computed C3 falls within 5% of the model's expected value (18.1 km²/s²), catching any regressions in the Lambert solver or planetary state vectors.
 
 ---
-Note on Accuracy: The ~2% variance in C3 is primarily due to the use of Keplerian mean elements (J2000) rather than high-fidelity numerical ephemerides (SPICE). This is a deliberate trade-off to keep the engine lightweight and dependency-free for browser-based computation.
 
 ## Potential Extensions
 
 - [ ] Pull live ephemeris from NASA Horizons API
+- [ ] Meeus secular polynomial elements for <2% ephemeris accuracy
 - [ ] Arrival C3 / hyperbolic approach ΔV
 - [ ] Multi-revolution Lambert solutions
 - [ ] Gravity assist trajectory branching
@@ -150,9 +143,9 @@ Note on Accuracy: The ~2% variance in C3 is primarily due to the use of Kepleria
 
 ## References
 
-- Lancaster & Blanchard (1969) — *A Unified Form of Lambert's Theorem*
+- Bate, Mueller & White — *Fundamentals of Astrodynamics* (primary Lambert implementation)
 - Battin, R.H. (1987) — *An Introduction to the Mathematics and Methods of Astrodynamics*
-- Bate, Mueller & White — *Fundamentals of Astrodynamics*
+- Meeus, J. — *Astronomical Algorithms*, 2nd ed.
 - NASA JPL Mission Design Center
 
 ---
