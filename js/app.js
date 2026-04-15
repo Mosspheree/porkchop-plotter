@@ -81,8 +81,8 @@ function computeLaunchWindows() {
   const hohmann = Math.PI * Math.sqrt(Math.pow(a_transfer, 3)) * 365.25 / (2 * Math.PI);
 
   const isOuter = (a2 > 4); 
-  const minTOF = isOuter ? hohmann * 0.5 : Math.max(30, hohmann * 0.38);
-  const maxTOF = isOuter ? hohmann * 1.5 : Math.min(400, hohmann * 2.5);
+  const minTOF = isOuter ? hohmann * 0.6 : Math.max(60, hohmann * 0.5);
+  const maxTOF = isOuter ? hohmann * 1.4 : Math.min(350, hohmann * 1.8);
 
   const startJD = OrbitalMechanics.dateToJD(startYear, 1, 1);
   const endJD = startJD + windowMonths * 30.44;
