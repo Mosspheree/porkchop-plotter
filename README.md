@@ -92,14 +92,20 @@ v_circ = √(μ_E / r_LEO)     # circular velocity at 200km orbit
 
 ```
 porkchop-plotter/
-├── index.html          # Main app shell
-├── css/
-│   └── style.css       # Dark space aesthetic, responsive layout
+├── .github/
+│   └── workflows/
+│       └── validate.yml    # CI/CD: Automated physics verification
 ├── js/
-│   ├── orbital.js      # Orbital mechanics engine (Lambert, Kepler, ephemeris)
-│   ├── plot.js         # Canvas rendering (colormap, contours, axes)
-│   └── app.js          # UI controller, event handling, orbit animation
-└── README.md
+│   ├── app.js              # UI Controller & logic
+│   ├── orbital.js          # The Physics Engine (Lambert/Kepler/Ephemeris)
+│   ├── plot.js             # Canvas rendering & Contours
+│   └── worker.js           # Background math processor
+├── tests/
+│   └── validation.test.js  # The 0.08% accuracy test suite
+├── index.html              # Entry point
+├── style.css               # Main stylesheet
+├── README.md               # Documentation
+└── simulation-demo.png     # Root-level screenshot
 ```
 
 ---
