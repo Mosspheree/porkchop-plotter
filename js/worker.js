@@ -25,7 +25,7 @@ self.onmessage = function(e) {
       const dataII = OrbitalMechanics.getMissionData(origin, dest, depDate, tof, true);
 
       const data = (dataI.c3 < dataII.c3) ? dataI : dataII;
-      const cappedC3 = Math.min(data.c3, 150);
+      const cappedC3 = (data.c3 > 0 && data.c3 < 1e6) ? Math.min(data.c3, 150) : 150;
       const idx = i * NY + j;
       
       c3Grid[idx] = cappedC3;
