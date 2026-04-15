@@ -248,3 +248,12 @@ const OrbitalMechanics = (() => {
 
   return { lambertC3, c3ToDeltaV, transferType, jdToDate, dateToJD, J2000, PLANETS };
 })();
+
+/** * Bridge for Node.js Testing 
+ * This allows the test script to see your math without breaking the browser.
+ */
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { 
+        lambertC3 
+    };
+}
