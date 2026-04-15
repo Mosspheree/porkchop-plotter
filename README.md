@@ -104,7 +104,7 @@ porkchop-plotter/
 
 ---
 
-## ⚖️ Verification & Accuracy
+## Verification & Accuracy
 
 Unlike standard web visualizations, this engine is benchmarked against real mission data. The **Lancaster-Blanchard** solver is validated using the Mars 2020 (Perseverance) trajectory.
 
