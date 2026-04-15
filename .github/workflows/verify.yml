@@ -1,0 +1,15 @@
+name: Orbital Engine Verification
+
+on: [push, pull_request]
+
+jobs:
+  verify-math:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Use Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      - name: Run Validation Suite
+        run: node tests/validation.test.js
