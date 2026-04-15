@@ -19,12 +19,12 @@ self.onmessage = function(e) {
     for (let j = 0; j < NY; j++) {
       const depDate = depDates[i];
       const tof = tofArr[j];
+
+
       const dataI = OrbitalMechanics.getMissionData(origin, dest, depDate, tof, false);
       const dataII = OrbitalMechanics.getMissionData(origin, dest, depDate, tof, true);
 
-      // Pick the solution with lower C3 energy
       const data = (dataI.c3 < dataII.c3) ? dataI : dataII;
-
       const cappedC3 = Math.min(data.c3, 150);
       const idx = i * NY + j;
       
@@ -41,13 +41,14 @@ self.onmessage = function(e) {
       if (cappedC3 > maxC3 && cappedC3 < 151) maxC3 = cappedC3;
     }
 
+
     if (i % Math.max(1, Math.floor(NX / 20)) === 0) {
       self.postMessage({ type: 'progress', percent: Math.round((i / NX) * 100) });
     }
   }
 
-  self.postMessage({ type: 'progress', percent: 100 });
 
+  self.postMessage({ type: 'progress', percent: 100 });
   self.postMessage({
     type: 'result',
     grid: c3Grid,
@@ -59,5 +60,4 @@ self.onmessage = function(e) {
     maxC3: Math.min(maxC3, minC3 + 100),
     bestIdx
   });
-};
 };
