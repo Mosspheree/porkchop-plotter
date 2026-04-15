@@ -21,7 +21,7 @@ let state = {
 };
 
 // Initialize Web Worker
-const worker = new Worker('worker.js');
+const worker = new Worker('js/worker.js'); 
 
 // ── DOM refs ───────────────────────────────────────────────────────────
 const canvas = document.getElementById('porkchop');
