@@ -28,7 +28,7 @@ let state = {
  * Using a relative path for GitHub Pages compatibility. 
  * Ensure worker.js is located in the /js folder.
  */
-const worker = new Worker('js/worker.js'); 
+const worker = new Worker('./js/worker.js'); 
 
 // ── DOM refs ───────────────────────────────────────────────────────────
 const canvas = document.getElementById('porkchop');
