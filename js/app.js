@@ -52,6 +52,10 @@ function computeLaunchWindows() {
   // Safe check for radio button resolution selection
   const resElement = document.querySelector('input[name="res"]:checked');
   const res = resElement ? parseInt(resElement.value) : 100;
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
 
   if (origin === dest) {
     hoverInfo.textContent = 'Origin and destination cannot be the same.';
